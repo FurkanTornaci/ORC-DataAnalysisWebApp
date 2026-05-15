@@ -433,21 +433,24 @@
     }
 
     function updateModeUI() {
-      const intervalMode = state.analysisMode === 'trim' || state.analysisMode === 'immersion' || state.analysisMode === 'wave';
+      const intervalMode = state.analysisMode === 'trim' || state.analysisMode === 'immersion' || state.analysisMode === 'wave' || state.analysisMode === 'disptrim';
+      const needsRegressionThresholds = state.analysisMode === 'trim' || state.analysisMode === 'immersion' || state.analysisMode === 'wave';
       el('intervalStepLabel').textContent = state.analysisMode === 'immersion'
         ? 'Immersion interval width (%)'
         : state.analysisMode === 'wave'
           ? 'Wave-height interval width (m)'
-          : 'Trim interval width (m)';
+          : state.analysisMode === 'disptrim'
+            ? 'Wave-height interval width (m)'
+            : 'Trim interval width (m)';
       el('groupListLabel').textContent = `${currentMetricName()} groups in current plot`;
       el('toggleAllBtn').textContent = 'Toggle All Groups';
-      el('intervalGroupsRow').style.display = intervalMode ? '' : 'none';
+      el('intervalGroupsRow').style.display = needsRegressionThresholds ? '' : 'none';
       el('trimStep').closest('.row').style.display = intervalMode ? '' : 'none';
-      el('minSamples').closest('.row').style.display = intervalMode ? '' : 'none';
-      el('minR2').closest('.row').style.display = intervalMode ? '' : 'none';
-      el('toggleAllBtn').style.display = intervalMode ? '' : 'none';
-      if (!intervalMode) {
-        el('groupListLabel').textContent = 'Groups are not used in Displacement vs Trim mode';
+      el('minSamples').closest('.row').style.display = needsRegressionThresholds ? '' : 'none';
+      el('minR2').closest('.row').style.display = needsRegressionThresholds ? '' : 'none';
+      el('toggleAllBtn').style.display = needsRegressionThresholds ? '' : 'none';
+      if (!needsRegressionThresholds) {
+        el('groupListLabel').textContent = 'Wave groups are shown by marker shape in Displacement vs Trim mode';
       }
     }
 
@@ -730,22 +733,40 @@
         state.currentPlotReady = false;
         return;
       }
-      const byVessel = new Map();
-      for (const r of samples) {
-        if (!byVessel.has(r.Vessel)) byVessel.set(r.Vessel, []);
-        byVessel.get(r.Vessel).push(r);
+      let waveStep = num(el('trimStep').value);
+      if (!Number.isFinite(waveStep) || waveStep <= 0) {
+        waveStep = 0.5;
+        el('trimStep').value = '0.5';
       }
+      const waveIntervals = buildIntervals(samples.map(r => r.Wave), waveStep);
+      const byWaveGroup = new Map();
+      for (const r of samples) {
+        const iv = waveIntervals.find(i => r.Wave >= i.left && r.Wave < i.right);
+        if (!iv) continue;
+        if (!byWaveGroup.has(iv.label)) byWaveGroup.set(iv.label, []);
+        byWaveGroup.get(iv.label).push(r);
+      }
+      const markerSymbols = ['circle', 'square', 'diamond', 'triangle-up', 'triangle-down', 'cross', 'x', 'pentagon', 'hexagon', 'star'];
       const traces = [];
-      for (const [vessel, rows] of [...byVessel.entries()].sort((a,b)=>a[0].localeCompare(b[0]))) {
+      const groupStats = [];
+      const sortedGroups = [...byWaveGroup.entries()].sort((a, b) => parseFloat(a[0]) - parseFloat(b[0]));
+      sortedGroups.forEach(([label, rows], idx) => {
+        const meanTrim = rows.reduce((acc, r) => acc + r.Trim, 0) / rows.length;
+        groupStats.push({ label, n: rows.length, meanTrim });
         traces.push({
           x: rows.map(r => r.Displacement),
           y: rows.map(r => r.Trim),
           mode: 'markers',
           type: 'scattergl',
-          name: `${vessel} (n=${rows.length})`,
-          marker: { size: 6, opacity: 0.72 }
+          name: `${label} (n=${rows.length}, mean trim=${meanTrim.toFixed(2)} m)`,
+          marker: {
+            size: 7,
+            opacity: 0.72,
+            symbol: markerSymbols[idx % markerSymbols.length],
+            color: PALETTE[idx % PALETTE.length]
+          }
         });
-      }
+      });
       const yMinRaw = el('yMin').value.trim();
       const yMaxRaw = el('yMax').value.trim();
       const yMin = yMinRaw === '' ? null : num(yMinRaw);
@@ -757,19 +778,15 @@
       const maxTrim = el('maxTrim').value.trim() || 'auto';
       const startDate = el('startDate').value || 'auto';
       const endDate = el('endDate').value || 'auto';
-      const vesselTrimMeans = [...byVessel.entries()]
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([vessel, rows]) => {
-          const avg = rows.reduce((acc, r) => acc + r.Trim, 0) / rows.length;
-          return `${vessel}: ${avg.toFixed(2)} m`;
-        })
+      const meanTrimByGroup = groupStats
+        .map(g => `${g.label}: ${g.meanTrim.toFixed(2)} m (n=${g.n})`)
         .join('<br>');
       renderMeta(
-        `<b>Filters</b><br>Displacement ${minDisp.toLocaleString()}-${maxDisp.toLocaleString()} MT<br>Trim ${minTrim} to ${maxTrim} m<br>Wave ${minWave.toFixed(2)}-${maxWave.toFixed(2)} m<br>Speed ${minSpeed.toFixed(2)}-${maxSpeed.toFixed(2)} kn<br>Date ${startDate} to ${endDate}<br>Rows used: ${samples.length.toLocaleString()}`,
-        `<b>Summary</b><br>Mode: Displacement vs Trim<br>Vessels: ${byVessel.size}<br><br><b>Mean Trim by Vessel</b><br>${vesselTrimMeans}`
+        `<b>Filters</b><br>Displacement ${minDisp.toLocaleString()}-${maxDisp.toLocaleString()} MT<br>Trim ${minTrim} to ${maxTrim} m<br>Wave ${minWave.toFixed(2)}-${maxWave.toFixed(2)} m<br>Wave interval width: ${waveStep.toFixed(2)} m<br>Speed ${minSpeed.toFixed(2)}-${maxSpeed.toFixed(2)} kn<br>Date ${startDate} to ${endDate}<br>Rows used: ${samples.length.toLocaleString()}`,
+        `<b>Summary</b><br>Mode: Displacement vs Trim (wave-grouped)<br>Wave groups: ${groupStats.length}<br><br><b>Mean Trim by Wave Group</b><br>${meanTrimByGroup || 'No groups'}`
       );
       Plotly.newPlot('plot', traces, {
-        title: { text: `${CONFIG[state.currentTab].label} | Displacement vs Trim` },
+        title: { text: `${CONFIG[state.currentTab].label} | Displacement vs Trim by Wave Interval` },
         xaxis: { title: 'Displacement (MT)', gridcolor: '#e6ebf2' },
         yaxis: { title: 'Trim (m)', gridcolor: '#e6ebf2', range: (yMin !== null && yMax !== null) ? [yMin, yMax] : undefined },
         plot_bgcolor: '#ffffff',
