@@ -143,7 +143,6 @@
     #status { margin-top: 10px; color: var(--muted); font-size: 13px; min-height: 18px; font-weight: 500; }
     .plot-card { padding: 12px; }
     .settings-card { position: sticky; top: 14px; }
-    .gallery { margin-top: 16px; }
     @media (max-width: 900px) {
       .wrap { padding: 16px; }
       h1 { font-size: 28px; }
@@ -153,7 +152,6 @@
       .btns { grid-template-columns: 1fr; }
       .settings-card { position: static; }
     }
-    .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 12px; }
     .shot img { width: 100%; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
     .shot img.clickable { cursor: pointer; }
     .shot h4 { margin: 0 0 8px; font-size: 14px; }
@@ -273,7 +271,6 @@
 
         <div class="btns">
           <button class="primary" id="generateBtn">Generate Plot</button>
-          <button id="savePageBtn">Save to Webpage</button>
           <button id="downloadPngBtn">Download PNG</button>
           <button id="downloadSummaryBtn">Summary CSV</button>
           <button id="downloadSamplesBtn">Samples CSV</button>
@@ -283,10 +280,6 @@
       </div>
     </div>
 
-    <div class="gallery card">
-      <h3 style="margin-top:0">Saved Plots on Webpage</h3>
-      <div id="gallery" class="gallery-grid"></div>
-    </div>
   </div>
 
   <script>
@@ -362,7 +355,6 @@
       summary: [],
       currentTitle: '',
       currentPlotReady: false,
-      gallery: [],
       availableVessels: [],
       selectedVessels: new Set()
     };
@@ -978,132 +970,6 @@
       });
     }
 
-    function initSaveToPage() {
-      el('savePageBtn').addEventListener('click', async () => {
-        if (!state.currentPlotReady) return setStatus('Generate a plot first.', true);
-        const dataUrl = await Plotly.toImage('plot', { format: 'png', width: 1500, height: 900 });
-        const minDisp = num(el('minDisp').value);
-        const maxDisp = num(el('maxDisp').value);
-        const minSpeed = num(el('minSpeed').value);
-        const maxSpeed = num(el('maxSpeed').value);
-        const startDate = el('startDate').value;
-        const endDate = el('endDate').value;
-        const minWave = num(el('minWave').value);
-        const maxWave = num(el('maxWave').value);
-        const minTrim = el('minTrim').value;
-        const maxTrim = el('maxTrim').value;
-        const yMin = el('yMin').value;
-        const yMax = el('yMax').value;
-        const trimStep = num(el('trimStep').value);
-        const minSamples = Math.max(1, Math.floor(num(el('minSamples').value)));
-        const minR2 = num(el('minR2').value);
-        const selectedVessels = [...state.selectedVessels];
-        const record = {
-          title: `${CONFIG[state.currentTab].label} | ${new Date().toLocaleString()} | ${state.analysisMode} groups: ${[...state.selected].join(', ')}`,
-          dataUrl,
-          classKey: state.currentTab,
-          analysisMode: state.analysisMode,
-          controls: { minDisp, maxDisp, minSpeed, maxSpeed, startDate, endDate, minWave, maxWave, minTrim, maxTrim, yMin, yMax, trimStep, minSamples, minR2, selectedVessels },
-          filteredAll: state.filtered,
-          summaryAll: state.summary,
-          eligible: [...state.eligible],
-          selected: [...state.selected],
-          summary: getSelectedSummary(),
-          samples: getSelectedSamples().map(r => ({
-            Vessel: r.Vessel,
-            Datetime: r.DT ? new Date(r.DT).toISOString() : '',
-            Trim: r.Trim,
-            propeller_immersion_pct: r.Immersion,
-            'SPEED THROUGH WATER': r.STW,
-            'SHAFT POWER': r.Power,
-            Displacement: r.Displacement,
-            wave_height: r.Wave,
-            group_interval: r[currentLabelKey()]
-          }))
-        };
-        state.gallery.push(record);
-        renderGallery();
-        setStatus('Saved current view to webpage gallery.');
-      });
-    }
-
-    function restoreSavedSnapshot(item) {
-      activateTab(item.classKey || 'H');
-      if (item.analysisMode === 'immersion' || item.analysisMode === 'trim' || item.analysisMode === 'disptrim') {
-        state.analysisMode = item.analysisMode;
-        document.querySelectorAll('[data-analysis]').forEach(b => b.classList.toggle('active', b.dataset.analysis === state.analysisMode));
-      }
-      updateModeUI();
-      if (item.controls) {
-        el('minDisp').value = item.controls.minDisp;
-        el('maxDisp').value = item.controls.maxDisp;
-        el('minSpeed').value = item.controls.minSpeed;
-        el('maxSpeed').value = item.controls.maxSpeed;
-        el('startDate').value = item.controls.startDate ?? '';
-        el('endDate').value = item.controls.endDate ?? '';
-        el('minWave').value = item.controls.minWave ?? 0;
-        el('maxWave').value = item.controls.maxWave;
-        el('minTrim').value = item.controls.minTrim ?? '';
-        el('maxTrim').value = item.controls.maxTrim ?? '';
-        el('yMin').value = item.controls.yMin ?? '';
-        el('yMax').value = item.controls.yMax ?? '';
-        el('trimStep').value = item.controls.trimStep;
-        el('minSamples').value = item.controls.minSamples;
-        el('minR2').value = item.controls.minR2 ?? 0.0;
-      }
-      if (item.controls?.selectedVessels) {
-        const selected = new Set(item.controls.selectedVessels);
-        [...el('vesselSelect').querySelectorAll('.vessel-chip')].forEach(chip => {
-          chip.classList.toggle('active', selected.has(chip.textContent));
-        });
-        state.selectedVessels = selected;
-      }
-      state.filtered = item.filteredAll || [];
-      state.summary = item.summaryAll || [];
-      state.eligible = item.eligible || [];
-      state.selected = new Set(item.selected || []);
-      renderTrimChecks();
-      drawPlot();
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      setStatus('Loaded saved plot to top editor. You can edit it again.');
-    }
-
-    function renderGallery() {
-      const g = el('gallery');
-      g.innerHTML = '';
-      state.gallery.forEach((item, idx) => {
-        const card = document.createElement('div');
-        card.className = 'shot';
-        card.innerHTML = `<h4>${idx + 1}. ${item.title}</h4><img class="clickable" src="${item.dataUrl}" alt="saved plot" title="Click to load this at top for editing" />`;
-        const img = card.querySelector('img');
-        img.addEventListener('click', () => restoreSavedSnapshot(item));
-        const dl = document.createElement('div');
-        dl.className = 'dl';
-
-        const b0 = document.createElement('button');
-        b0.textContent = 'Edit this';
-        b0.onclick = () => restoreSavedSnapshot(item);
-
-        const b1 = document.createElement('button');
-        b1.textContent = 'PNG';
-        b1.onclick = () => {
-          const a = document.createElement('a'); a.href = item.dataUrl; a.download = `saved_plot_${idx+1}.png`; a.click();
-        };
-
-        const b2 = document.createElement('button');
-        b2.textContent = 'Summary CSV';
-        b2.onclick = () => downloadBlob(`saved_plot_${idx+1}_summary.csv`, new Blob([toCsv(item.summary)], { type: 'text/csv' }));
-
-        const b3 = document.createElement('button');
-        b3.textContent = 'Samples CSV';
-        b3.onclick = () => downloadBlob(`saved_plot_${idx+1}_samples.csv`, new Blob([toCsv(item.samples)], { type: 'text/csv' }));
-
-        dl.append(b0,b1,b2,b3);
-        card.appendChild(dl);
-        g.appendChild(card);
-      });
-    }
-
     function initToggleAll() {
       el('toggleAllBtn').addEventListener('click', () => {
         if (!state.eligible.length) return;
@@ -1129,7 +995,6 @@
         });
       });
       initDownloads();
-      initSaveToPage();
       initToggleAll();
       el('generateBtn').addEventListener('click', generatePlot);
       applyDefaults();
