@@ -757,7 +757,7 @@
           y: rows.map(r => r.Trim),
           mode: 'markers',
           type: 'scattergl',
-          name: `${label}`,
+          name: `${label} (n=${rows.length}, mean trim=${meanTrim.toFixed(2)} m)`,
           marker: {
             size: 7,
             opacity: 0.72,
@@ -791,7 +791,7 @@
         plot_bgcolor: '#ffffff',
         paper_bgcolor: '#ffffff',
         margin: { l: 70, r: 30, t: 80, b: 150 },
-        legend: { orientation: 'v', x: 0, y: -0.16, xanchor: 'left', yanchor: 'top', bgcolor: 'rgba(255,255,255,0.65)' }
+        legend: { orientation: 'h', x: 0.5, y: -0.16, xanchor: 'center', yanchor: 'top', bgcolor: 'rgba(255,255,255,0.65)' }
       }, { responsive: true, displaylogo: false });
       state.currentTitle = `${CONFIG[state.currentTab].label.toLowerCase().replace(/\s+/g,'_')}_displacement_vs_trim`;
       state.currentPlotReady = true;
