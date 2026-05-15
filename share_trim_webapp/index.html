@@ -232,6 +232,7 @@
     <div class="tabs">
       <button class="tab active" data-analysis="trim">Trim Intervals</button>
       <button class="tab" data-analysis="immersion">Propeller Immersion Intervals</button>
+      <button class="tab" data-analysis="wave">Wave Height Intervals</button>
       <button class="tab" data-analysis="disptrim">Displacement vs Trim</button>
     </div>
 
@@ -386,24 +387,32 @@
     }
 
     function currentMetricName() {
-      return state.analysisMode === 'immersion' ? 'Propeller immersion (%)' : 'Trim';
+      if (state.analysisMode === 'immersion') return 'Propeller immersion (%)';
+      if (state.analysisMode === 'wave') return 'Wave height (m)';
+      return 'Trim';
     }
 
     function currentLabelKey() {
       if (state.analysisMode === 'disptrim') return null;
-      return state.analysisMode === 'immersion' ? 'immersionLabel' : 'trimLabel';
+      if (state.analysisMode === 'immersion') return 'immersionLabel';
+      if (state.analysisMode === 'wave') return 'waveLabel';
+      return 'trimLabel';
     }
 
     function currentValueKey() {
       if (state.analysisMode === 'disptrim') return null;
-      return state.analysisMode === 'immersion' ? 'Immersion' : 'Trim';
+      if (state.analysisMode === 'immersion') return 'Immersion';
+      if (state.analysisMode === 'wave') return 'Wave';
+      return 'Trim';
     }
 
     function updateModeUI() {
-      const intervalMode = state.analysisMode === 'trim' || state.analysisMode === 'immersion';
+      const intervalMode = state.analysisMode === 'trim' || state.analysisMode === 'immersion' || state.analysisMode === 'wave';
       el('intervalStepLabel').textContent = state.analysisMode === 'immersion'
         ? 'Immersion interval width (%)'
-        : 'Trim interval width (m)';
+        : state.analysisMode === 'wave'
+          ? 'Wave-height interval width (m)'
+          : 'Trim interval width (m)';
       el('groupListLabel').textContent = `${currentMetricName()} groups in current plot`;
       el('toggleAllBtn').textContent = 'Toggle All Groups';
       el('intervalGroupsRow').style.display = intervalMode ? '' : 'none';
@@ -862,7 +871,11 @@
           return;
         }
 
-        const trimStep = num(el('trimStep').value);
+        let trimStep = num(el('trimStep').value);
+        if (!Number.isFinite(trimStep) || trimStep <= 0) {
+          trimStep = 0.5;
+          el('trimStep').value = '0.5';
+        }
         const minSamples = Math.max(1, Math.floor(num(el('minSamples').value)));
         const minR2 = num(el('minR2').value);
         if (!Number.isFinite(minR2) || minR2 < 0 || minR2 > 1) {
@@ -991,7 +1004,7 @@
           document.querySelectorAll('[data-analysis]').forEach(b => b.classList.toggle('active', b === btn));
           updateModeUI();
           applyDefaults();
-          setStatus(`Switched to ${state.analysisMode === 'immersion' ? 'Propeller Immersion' : state.analysisMode === 'disptrim' ? 'Displacement vs Trim' : 'Trim'} mode.`);
+          setStatus(`Switched to ${state.analysisMode === 'immersion' ? 'Propeller Immersion' : state.analysisMode === 'wave' ? 'Wave Height Intervals' : state.analysisMode === 'disptrim' ? 'Displacement vs Trim' : 'Trim'} mode.`);
         });
       });
       initDownloads();
