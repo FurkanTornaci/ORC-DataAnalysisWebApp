@@ -1,0 +1,1015 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trim Interval Speed-Power Visualizer</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <style>
+    :root {
+      --bg: #f3f5f7;
+      --panel: #ffffff;
+      --ink: #1b2430;
+      --muted: #5e6a79;
+      --line: #d7dce3;
+      --accent: #0f6fff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      background: radial-gradient(1200px 500px at 80% -20%, #e3f0ff 0%, var(--bg) 45%);
+      color: var(--ink);
+    }
+    .wrap { width: 100%; margin: 0; padding: 20px 24px; }
+    h1 { margin: 0 0 8px; font-size: 28px; }
+    .sub { color: var(--muted); margin-bottom: 14px; }
+    .warn {
+      background: #fff8e8;
+      border: 1px solid #f2d7a8;
+      color: #6f4b00;
+      padding: 10px 12px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      font-size: 14px;
+    }
+    .tabs { display: flex; gap: 8px; margin: 10px 0 14px; }
+    .tab {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      padding: 8px 14px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+      align-items: start;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
+    }
+    .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 3px; }
+    input[type="number"] {
+      width: 100%; padding: 7px 8px; border: 1px solid var(--line); border-radius: 8px;
+      font-size: 14px;
+    }
+    .row { margin-bottom: 10px; }
+    .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+    button {
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .trim-box {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px;
+      max-height: 180px;
+      overflow: auto;
+      background: #fcfdff;
+    }
+    .trim-item { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 13px; }
+    .vessel-box {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px;
+      max-height: 180px;
+      overflow: auto;
+      background: #fcfdff;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .vessel-chip {
+      border: 1px solid #c7d4e5;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 13px;
+      cursor: pointer;
+      user-select: none;
+      background: #ffffff;
+      color: #36485f;
+      transition: all .12s ease;
+    }
+    .vessel-chip.active {
+      background: #e7f0ff;
+      border-color: #8eb2ea;
+      color: #15407b;
+      font-weight: 600;
+    }
+    #plot { width: 100%; min-height: 78vh; }
+    #status { margin-top: 8px; color: var(--muted); font-size: 13px; min-height: 18px; }
+    .plot-card { padding: 10px; }
+    .settings-card { margin-top: 12px; }
+    .gallery { margin-top: 16px; }
+    @media (max-width: 900px) {
+      .wrap { padding: 14px; }
+      #plot { min-height: 60vh; }
+      .controls { grid-template-columns: 1fr; }
+      .btns { grid-template-columns: 1fr; }
+    }
+    .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 12px; }
+    .shot img { width: 100%; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+    .shot img.clickable { cursor: pointer; }
+    .shot h4 { margin: 0 0 8px; font-size: 14px; }
+    .shot .dl { display: flex; gap: 8px; margin-top: 8px; }
+    .small { font-size: 12px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Trim Interval Speed-Power Visualizer</h1>
+    <div class="sub">Fit model: <b>P = a × V³</b>. Tabs: H (1h processed files) and G (1h processed files).</div>
+    <div class="warn" id="protocolWarning" style="display:none">Serve this folder over HTTP (not file://). Example: run <code>python -m http.server 8000</code> in this folder, then open <code>http://localhost:8000</code>.</div>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="H">H Vessels</button>
+      <button class="tab" data-tab="G">G Vessels</button>
+    </div>
+    <div class="tabs">
+      <button class="tab active" data-analysis="trim">Trim Intervals</button>
+      <button class="tab" data-analysis="immersion">Propeller Immersion Intervals</button>
+      <button class="tab" data-analysis="timeseries">Date vs Shaft Power</button>
+    </div>
+
+    <div class="grid">
+      <div class="card plot-card">
+        <div id="plot"></div>
+      </div>
+
+      <div class="card settings-card">
+        <div class="controls">
+          <div class="row"><label>Min displacement (MT)</label><input type="number" id="minDisp" /></div>
+          <div class="row"><label>Max displacement (MT)</label><input type="number" id="maxDisp" /></div>
+          <div class="row"><label>Min speed (kn)</label><input type="number" step="0.1" id="minSpeed" /></div>
+          <div class="row"><label>Max speed (kn)</label><input type="number" step="0.1" id="maxSpeed" /></div>
+          <div class="row"><label>Start date</label><input type="date" id="startDate" /></div>
+          <div class="row"><label>End date</label><input type="date" id="endDate" /></div>
+          <div class="row"><label>Min wave height (m)</label><input type="number" step="0.1" id="minWave" value="0.0" /></div>
+          <div class="row"><label>Max wave height (m)</label><input type="number" step="0.1" id="maxWave" /></div>
+          <div class="row"><label>Y-axis min (kW, optional)</label><input type="number" step="10" id="yMin" placeholder="auto" /></div>
+          <div class="row"><label>Y-axis max (kW, optional)</label><input type="number" step="10" id="yMax" placeholder="auto" /></div>
+          <div class="row"><label id="intervalStepLabel">Trim interval width (m)</label><input type="number" step="0.1" id="trimStep" value="0.5" /></div>
+          <div class="row"><label>Min samples/interval</label><input type="number" step="1" id="minSamples" value="31" /></div>
+          <div class="row"><label>Min R²/interval</label><input type="number" step="0.01" min="0" max="1" id="minR2" value="0.00" /></div>
+          <div class="row"><label>Min trim (m, optional)</label><input type="number" step="0.1" id="minTrim" placeholder="auto" /></div>
+          <div class="row"><label>Max trim (m, optional)</label><input type="number" step="0.1" id="maxTrim" placeholder="auto" /></div>
+        </div>
+
+        <div class="row">
+          <label>Vessel selection (one or many)</label>
+          <div id="vesselSelect" class="vessel-box"></div>
+        </div>
+
+        <div class="row" id="intervalGroupsRow">
+          <label id="groupListLabel">Trim groups in current plot</label>
+          <div id="trimGroups" class="trim-box"></div>
+        </div>
+
+        <div class="btns">
+          <button class="primary" id="generateBtn">Generate Plot</button>
+          <button id="savePageBtn">Save to Webpage</button>
+          <button id="downloadPngBtn">Download PNG</button>
+          <button id="downloadSummaryBtn">Summary CSV</button>
+          <button id="downloadSamplesBtn">Samples CSV</button>
+          <button id="toggleAllBtn">Toggle All Groups</button>
+        </div>
+        <div id="status"></div>
+      </div>
+    </div>
+
+    <div class="gallery card">
+      <h3 style="margin-top:0">Saved Plots on Webpage</h3>
+      <div id="gallery" class="gallery-grid"></div>
+    </div>
+  </div>
+
+  <script>
+    const CONFIG = {
+      H: {
+        label: 'H Class',
+        files: [
+          'data/h/hauke_smart_1h_with_condition_and_weather.csv',
+          'data/h/hedwig_smart_1h_with_condition_and_weather.csv',
+          'data/h/heide_smart_1h_with_condition_and_weather.csv',
+          'data/h/helga_smart_1h_with_condition_and_weather.csv',
+          'data/h/hermine_smart_1h_with_condition_and_weather.csv',
+          'data/h/hille_smart_1h_with_condition_and_weather.csv'
+        ],
+        defaults: { minDisp: 90000, maxDisp: 100000, minSpeed: 11, maxSpeed: 13, maxWave: 1.5 }
+      },
+      G: {
+        label: 'G Class',
+        files: [
+          'data/g/gebe_smart_1h_with_condition_and_weather.csv',
+          'data/g/georg_smart_1h_with_condition_and_weather.csv',
+          'data/g/gertrude_smart_1h_with_condition_and_weather.csv',
+          'data/g/gisela_smart_1h_with_condition_and_weather.csv',
+          'data/g/gretke_smart_1h_with_condition_and_weather.csv'
+        ],
+        defaults: { minDisp: 30000, maxDisp: 50000, minSpeed: 8, maxSpeed: 15, maxWave: 1.5 }
+      }
+    };
+
+    const PALETTE = ['#1F77B4','#D62728','#2CA02C','#9467BD','#FF7F0E','#8C564B','#E377C2','#17BECF','#BCBD22','#7F7F7F','#1A9850','#F46D43'];
+    const state = {
+      currentTab: 'H',
+      analysisMode: 'trim',
+      dataCache: { H: null, G: null },
+      eligible: [],
+      selected: new Set(),
+      filtered: [],
+      summary: [],
+      currentTitle: '',
+      currentPlotReady: false,
+      gallery: [],
+      availableVessels: [],
+      selectedVessels: new Set()
+    };
+
+    const el = id => document.getElementById(id);
+
+    function hashString(s) {
+      let h = 2166136261;
+      for (let i = 0; i < s.length; i++) {
+        h ^= s.charCodeAt(i);
+        h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24);
+      }
+      return Math.abs(h >>> 0);
+    }
+
+    function colorForTrim(label) {
+      return PALETTE[hashString(label) % PALETTE.length];
+    }
+
+    function setStatus(msg, isErr=false) {
+      const s = el('status');
+      s.textContent = msg;
+      s.style.color = isErr ? '#b00020' : '#5e6a79';
+    }
+
+    function intervalLabel(left, right) {
+      const unit = state.analysisMode === 'immersion' ? '%' : 'm';
+      return `${left.toFixed(1)}-${right.toFixed(1)} ${unit}`;
+    }
+
+    function currentMetricName() {
+      return state.analysisMode === 'immersion' ? 'Propeller immersion (%)' : 'Trim';
+    }
+
+    function currentLabelKey() {
+      if (state.analysisMode === 'timeseries') return null;
+      return state.analysisMode === 'immersion' ? 'immersionLabel' : 'trimLabel';
+    }
+
+    function currentValueKey() {
+      if (state.analysisMode === 'timeseries') return null;
+      return state.analysisMode === 'immersion' ? 'Immersion' : 'Trim';
+    }
+
+    function updateModeUI() {
+      const intervalMode = state.analysisMode !== 'timeseries';
+      el('intervalStepLabel').textContent = state.analysisMode === 'immersion'
+        ? 'Immersion interval width (%)'
+        : 'Trim interval width (m)';
+      el('groupListLabel').textContent = `${currentMetricName()} groups in current plot`;
+      el('toggleAllBtn').textContent = 'Toggle All Groups';
+      el('intervalGroupsRow').style.display = intervalMode ? '' : 'none';
+      el('trimStep').closest('.row').style.display = intervalMode ? '' : 'none';
+      el('minSamples').closest('.row').style.display = intervalMode ? '' : 'none';
+      el('minR2').closest('.row').style.display = intervalMode ? '' : 'none';
+      el('toggleAllBtn').style.display = intervalMode ? '' : 'none';
+      if (!intervalMode) {
+        el('groupListLabel').textContent = 'Groups are not used in Date vs Shaft Power mode';
+      }
+    }
+
+    function num(v) {
+      const x = Number(v);
+      return Number.isFinite(x) ? x : NaN;
+    }
+
+    function parseDateValue(value) {
+      if (!value) return null;
+      const d = new Date(`${value}T00:00:00Z`);
+      return Number.isFinite(d.getTime()) ? d.getTime() : null;
+    }
+
+    function downloadBlob(filename, blob) {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 500);
+    }
+
+    function toCsv(rows) {
+      if (!rows.length) return '';
+      const headers = Object.keys(rows[0]);
+      const esc = v => {
+        if (v === null || v === undefined) return '';
+        const s = String(v);
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      return [headers.join(','), ...rows.map(r => headers.map(h => esc(r[h])).join(','))].join('\n');
+    }
+
+    function parseCsvText(text) {
+      const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
+      if (parsed.errors && parsed.errors.length) {
+        const hard = parsed.errors.find(e => e.code !== 'UndetectableDelimiter');
+        if (hard) throw new Error(hard.message);
+      }
+      return parsed.data;
+    }
+
+    async function loadClassData(classKey) {
+      if (state.dataCache[classKey]) return state.dataCache[classKey];
+      const files = CONFIG[classKey].files;
+      const combined = [];
+      for (const path of files) {
+        const res = await fetch(path);
+        if (!res.ok) throw new Error(`Could not read ${path}`);
+        const rows = parseCsvText(await res.text());
+        const inferredVessel = path.split('/').pop().split('_smart_')[0];
+        for (const r of rows) {
+          const dtRaw = r['Datetime'] || r['UTC'] || ((r['Date'] && r['Time']) ? `${r['Date']} ${r['Time']}` : null);
+          const dtMs = dtRaw ? Date.parse(dtRaw) : NaN;
+          const draftAft = num(r['Draft_Aft'] ?? r['DRAFT AFT LEVEL']);
+          const immersion = classKey === 'H'
+            ? ((draftAft - 4.855) / 9.6) * 100.0
+            : ((draftAft - 3.55) / 6.95) * 100.0;
+          combined.push({
+            Vessel: (r['Vessel'] || inferredVessel || '').trim(),
+            DT: Number.isFinite(dtMs) ? dtMs : null,
+            Trim: num(r['Trim']),
+            Immersion: immersion,
+            STW: num(r['SPEED THROUGH WATER']),
+            Power: num(r['SHAFT POWER']),
+            Displacement: num(r['Displacement']),
+            Wave: num(r['wave_height'])
+          });
+        }
+      }
+      state.dataCache[classKey] = combined;
+      return combined;
+    }
+
+    function refreshVesselSelect(rows) {
+      const box = el('vesselSelect');
+      const vessels = [...new Set(rows.map(r => r.Vessel).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+      state.availableVessels = vessels;
+      const previous = new Set(state.selectedVessels);
+      box.innerHTML = '';
+      const selectedNow = new Set();
+      for (const v of vessels) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'vessel-chip';
+        chip.textContent = v;
+        const active = previous.size ? previous.has(v) : true;
+        chip.classList.toggle('active', active);
+        if (active) selectedNow.add(v);
+        chip.addEventListener('click', () => {
+          chip.classList.toggle('active');
+          if (chip.classList.contains('active')) selectedNow.add(v);
+          else selectedNow.delete(v);
+          state.selectedVessels = new Set(selectedNow);
+          generatePlot();
+        });
+        box.appendChild(chip);
+      }
+      state.selectedVessels = selectedNow;
+    }
+
+    async function preloadVesselsForCurrentTab() {
+      try {
+        const raw = await loadClassData(state.currentTab);
+        refreshVesselSelect(raw);
+      } catch (err) {
+        console.error(err);
+        setStatus(`Error while loading vessel list: ${err.message}`, true);
+      }
+    }
+
+    function fitA(points) {
+      let nume = 0;
+      let deno = 0;
+      for (const p of points) {
+        const x = Math.pow(p.STW, 3);
+        nume += x * p.Power;
+        deno += x * x;
+      }
+      if (!Number.isFinite(deno) || deno <= 1e-12) return NaN;
+      return nume / deno;
+    }
+
+    function fitR2(points, a) {
+      if (!Number.isFinite(a) || !points.length) return NaN;
+      let sumY = 0;
+      for (const p of points) sumY += p.Power;
+      const meanY = sumY / points.length;
+      let ssRes = 0;
+      let ssTot = 0;
+      for (const p of points) {
+        const pred = a * Math.pow(p.STW, 3);
+        const err = p.Power - pred;
+        const dev = p.Power - meanY;
+        ssRes += err * err;
+        ssTot += dev * dev;
+      }
+      if (!Number.isFinite(ssTot) || ssTot <= 1e-12) return NaN;
+      return 1 - (ssRes / ssTot);
+    }
+
+    function buildIntervals(values, step) {
+      const valid = values.filter(Number.isFinite);
+      const min = Math.min(...valid);
+      const max = Math.max(...valid);
+      let start = Math.floor(min / step) * step;
+      let end = Math.floor(max / step) * step + step;
+      if (!Number.isFinite(start) || !Number.isFinite(end)) return [];
+      const out = [];
+      for (let x = start; x < end - 1e-12; x += step) {
+        out.push({ left: Number(x.toFixed(10)), right: Number((x + step).toFixed(10)), label: intervalLabel(x, x + step) });
+      }
+      return out;
+    }
+
+    function applyFilters(rows) {
+      const minDisp = num(el('minDisp').value);
+      const maxDisp = num(el('maxDisp').value);
+      const minSpeed = num(el('minSpeed').value);
+      const maxSpeed = num(el('maxSpeed').value);
+      const startMs = parseDateValue(el('startDate').value);
+      let endMs = parseDateValue(el('endDate').value);
+      if (endMs !== null) endMs += 24*3600*1000 - 1;
+      const minWave = num(el('minWave').value);
+      const maxWave = num(el('maxWave').value);
+      const minTrimRaw = el('minTrim').value.trim();
+      const maxTrimRaw = el('maxTrim').value.trim();
+      const minTrim = minTrimRaw === '' ? null : num(minTrimRaw);
+      const maxTrim = maxTrimRaw === '' ? null : num(maxTrimRaw);
+      const selectedV = state.selectedVessels.size ? state.selectedVessels : new Set(state.availableVessels);
+      const valueKey = currentValueKey();
+      return rows.filter(r => (
+        (state.analysisMode === 'timeseries' || Number.isFinite(r[valueKey])) && Number.isFinite(r.STW) && Number.isFinite(r.Power) &&
+        Number.isFinite(r.Displacement) && Number.isFinite(r.Wave) &&
+        r.Power > 0 &&
+        r.Displacement >= minDisp && r.Displacement <= maxDisp &&
+        r.STW >= minSpeed && r.STW <= maxSpeed &&
+        selectedV.has(r.Vessel) &&
+        (minTrim === null || r.Trim >= minTrim) &&
+        (maxTrim === null || r.Trim <= maxTrim) &&
+        (startMs === null || (r.DT !== null && r.DT >= startMs)) &&
+        (endMs === null || (r.DT !== null && r.DT <= endMs)) &&
+        r.Wave >= minWave &&
+        r.Wave < maxWave
+      ));
+    }
+
+    function assignIntervals(filtered, intervals) {
+      const valueKey = currentValueKey();
+      const labelKey = currentLabelKey();
+      return filtered.map(r => {
+        const iv = intervals.find(i => r[valueKey] >= i.left && r[valueKey] < i.right);
+        return iv ? { ...r, [labelKey]: iv.label, groupLeft: iv.left, groupRight: iv.right } : null;
+      }).filter(Boolean);
+    }
+
+    function summarize(assigned, minSamples, minR2) {
+      const labelKey = currentLabelKey();
+      const by = new Map();
+      for (const r of assigned) {
+        if (!by.has(r[labelKey])) by.set(r[labelKey], []);
+        by.get(r[labelKey]).push(r);
+      }
+      const labels = [...by.keys()].sort((a,b) => parseFloat(a) - parseFloat(b));
+      const summary = [];
+      const eligible = [];
+      for (const label of labels) {
+        const part = by.get(label);
+        const a = fitA(part);
+        const r2 = fitR2(part, a);
+        const n = part.length;
+        const rmse = Math.sqrt(part.reduce((acc,p) => {
+          const pred = a * Math.pow(p.STW,3);
+          return acc + Math.pow(p.Power - pred, 2);
+        }, 0) / n);
+        const enoughSamples = n >= minSamples;
+        const included = enoughSamples && Number.isFinite(r2) && (r2 >= minR2);
+        const rec = {
+          group_interval: label,
+          sample_count: n,
+          included,
+          a: enoughSamples ? a : NaN,
+          r2,
+          rmse_kw: enoughSamples ? rmse : NaN
+        };
+        summary.push(rec);
+        if (rec.included) eligible.push(label);
+      }
+      return { summary, eligible };
+    }
+
+    function renderTrimChecks() {
+      const box = el('trimGroups');
+      box.innerHTML = '';
+      if (!state.eligible.length) {
+        box.innerHTML = '<div class="small">No trim groups yet. Generate plot first.</div>';
+        return;
+      }
+      for (const label of state.eligible) {
+        const row = document.createElement('label');
+        row.className = 'trim-item';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = state.selected.has(label);
+        cb.addEventListener('change', () => {
+          if (cb.checked) state.selected.add(label); else state.selected.delete(label);
+          drawPlot();
+        });
+        const sw = document.createElement('span');
+        sw.style.display = 'inline-block';
+        sw.style.width = '10px';
+        sw.style.height = '10px';
+        sw.style.borderRadius = '50%';
+        sw.style.background = colorForTrim(label);
+        const t = document.createElement('span');
+        t.textContent = label;
+        row.append(cb, sw, t);
+        box.appendChild(row);
+      }
+    }
+
+    function getSelectedSummary() {
+      if (state.analysisMode === 'timeseries') return state.summary || [];
+      return state.summary.filter(r => state.selected.has(r.group_interval));
+    }
+
+    function getSelectedSamples() {
+      if (state.analysisMode === 'timeseries') return state.filtered || [];
+      const labelKey = currentLabelKey();
+      return state.filtered.filter(r => state.selected.has(r[labelKey]));
+    }
+
+    function drawTimeSeriesPlot() {
+      const samples = state.filtered || [];
+      if (!samples.length) {
+        Plotly.purge('plot');
+        el('plot').innerHTML = '<div class="small" style="padding:20px">No rows after current filters.</div>';
+        state.currentPlotReady = false;
+        return;
+      }
+      const byVessel = new Map();
+      for (const r of samples) {
+        if (!byVessel.has(r.Vessel)) byVessel.set(r.Vessel, []);
+        byVessel.get(r.Vessel).push(r);
+      }
+      const traces = [];
+      for (const [vessel, rows] of [...byVessel.entries()].sort((a,b)=>a[0].localeCompare(b[0]))) {
+        rows.sort((a,b)=>(a.DT||0)-(b.DT||0));
+        traces.push({
+          x: rows.map(r => new Date(r.DT)),
+          y: rows.map(r => r.Power),
+          mode: 'markers',
+          type: 'scattergl',
+          name: `${vessel} (n=${rows.length})`,
+          marker: { size: 5, opacity: 0.7 }
+        });
+      }
+      const yMinRaw = el('yMin').value.trim();
+      const yMaxRaw = el('yMax').value.trim();
+      const yMin = yMinRaw === '' ? null : num(yMinRaw);
+      const yMax = yMaxRaw === '' ? null : num(yMaxRaw);
+      const minDisp = num(el('minDisp').value), maxDisp = num(el('maxDisp').value);
+      const minSpeed = num(el('minSpeed').value), maxSpeed = num(el('maxSpeed').value);
+      const minWave = num(el('minWave').value), maxWave = num(el('maxWave').value);
+      const startDate = el('startDate').value || 'auto';
+      const endDate = el('endDate').value || 'auto';
+      Plotly.newPlot('plot', traces, {
+        title: { text: `${CONFIG[state.currentTab].label} | Date vs Shaft Power` },
+        xaxis: { title: 'Date', gridcolor: '#e6ebf2' },
+        yaxis: { title: 'Shaft Power (kW)', gridcolor: '#e6ebf2', range: (yMin !== null && yMax !== null) ? [yMin, yMax] : undefined },
+        plot_bgcolor: '#ffffff',
+        paper_bgcolor: '#ffffff',
+        margin: { l: 70, r: 260, t: 80, b: 80 },
+        legend: { x: 1.02, y: 0.5, xanchor: 'left', yanchor: 'middle', bgcolor: 'rgba(255,255,255,0.65)' },
+        annotations: [{
+          x: 0.01, y: 0.99, xref: 'paper', yref: 'paper', showarrow: false, align: 'left',
+          text: `Filters:<br>Displacement ${minDisp.toLocaleString()}-${maxDisp.toLocaleString()} MT<br>Wave height ${minWave.toFixed(2)} to ${maxWave.toFixed(2)} m<br>Speed ${minSpeed.toFixed(2)}-${maxSpeed.toFixed(2)} kn<br>Date ${startDate} to ${endDate}<br>Rows used: ${samples.length.toLocaleString()}`,
+          bgcolor: 'rgba(255,255,255,0.93)', bordercolor: '#cbd5e1', borderwidth: 1, font: { size: 12 }
+        }]
+      }, { responsive: true, displaylogo: false });
+      state.currentTitle = `${CONFIG[state.currentTab].label.toLowerCase().replace(/\s+/g,'_')}_date_vs_shaft_power`;
+      state.currentPlotReady = true;
+    }
+
+    function drawPlot() {
+      if (state.analysisMode === 'timeseries') {
+        drawTimeSeriesPlot();
+        return;
+      }
+      const selectedSummary = getSelectedSummary();
+      if (!selectedSummary.length) {
+        Plotly.purge('plot');
+        el('plot').innerHTML = '<div class="small" style="padding:20px">No trim group selected.</div>';
+        state.currentPlotReady = false;
+        return;
+      }
+      const samples = getSelectedSamples();
+      const traces = [];
+
+      const scatterX = samples.map(r => r.STW);
+      const scatterY = samples.map(r => r.Power);
+      const labelKey = currentLabelKey();
+      const scatterC = samples.map(r => colorForTrim(r[labelKey]));
+      traces.push({
+        x: scatterX,
+        y: scatterY,
+        mode: 'markers',
+        type: 'scattergl',
+        name: 'Samples',
+        marker: { size: 6, color: scatterC, opacity: 0.18 },
+        hovertemplate: 'STW=%{x:.2f}<br>Power=%{y:.0f}<extra></extra>'
+      });
+
+      for (const rec of selectedSummary.sort((a,b) => parseFloat(a.group_interval) - parseFloat(b.group_interval))) {
+        const label = rec.group_interval;
+        const part = samples.filter(r => r[labelKey] === label);
+        if (!part.length) continue;
+        const minV = Math.min(...part.map(r => r.STW));
+        const maxV = Math.max(...part.map(r => r.STW));
+        const xs = [];
+        const ys = [];
+        const nPts = 120;
+        for (let i=0;i<nPts;i++) {
+          const v = minV + (maxV - minV) * (i/(nPts-1));
+          xs.push(v);
+          ys.push(rec.a * Math.pow(v,3));
+        }
+        traces.push({
+          x: xs,
+          y: ys,
+          mode: 'lines',
+          type: 'scatter',
+          line: { width: 2.8, color: colorForTrim(label) },
+          name: `${label} (n=${rec.sample_count}, a=${rec.a.toFixed(4)}, R²=${rec.r2.toFixed(3)})`,
+          hovertemplate: `${label}<br>STW=%{x:.2f}<br>Power=%{y:.0f}<extra></extra>`
+        });
+      }
+
+      const minDisp = num(el('minDisp').value), maxDisp = num(el('maxDisp').value);
+      const minSpeed = num(el('minSpeed').value), maxSpeed = num(el('maxSpeed').value);
+      const minWave = num(el('minWave').value), maxWave = num(el('maxWave').value), trimStep = num(el('trimStep').value), minSamples = num(el('minSamples').value), minR2 = num(el('minR2').value);
+      const yMinRaw = el('yMin').value.trim();
+      const yMaxRaw = el('yMax').value.trim();
+      const yMin = yMinRaw === '' ? null : num(yMinRaw);
+      const yMax = yMaxRaw === '' ? null : num(yMaxRaw);
+      const startDate = el('startDate').value || 'auto';
+      const endDate = el('endDate').value || 'auto';
+      const selectedVesselCount = state.selectedVessels.size || state.availableVessels.length;
+      const aVals = selectedSummary.map(r => r.a).filter(Number.isFinite);
+      const bestA = Math.max(...aVals), worstA = Math.min(...aVals);
+      const diff = worstA !== 0 ? ((bestA - worstA) / worstA) * 100 : NaN;
+
+      const layout = {
+        title: { text: `${CONFIG[state.currentTab].label} | Speed vs Shaft Power by ${currentMetricName()} Interval` },
+        xaxis: { title: 'Speed Through Water (kn)', gridcolor: '#e6ebf2' },
+        yaxis: { title: 'Shaft Power (kW)', gridcolor: '#e6ebf2', range: (yMin !== null && yMax !== null) ? [yMin, yMax] : undefined },
+        plot_bgcolor: '#ffffff',
+        paper_bgcolor: '#ffffff',
+        margin: { l: 70, r: 280, t: 80, b: 80 },
+        legend: { x: 1.02, y: 0.5, xanchor: 'left', yanchor: 'middle', bgcolor: 'rgba(255,255,255,0.65)' },
+        annotations: [
+          {
+            x: 0.01, y: 0.99, xref: 'paper', yref: 'paper', showarrow: false, align: 'left',
+            text: `Filters:<br>Displacement ${minDisp.toLocaleString()}-${maxDisp.toLocaleString()} MT<br>Wave height ${minWave.toFixed(2)} to ${maxWave.toFixed(2)} m<br>Speed ${minSpeed.toFixed(2)}-${maxSpeed.toFixed(2)} kn<br>Date ${startDate} to ${endDate}<br>Vessels selected: ${selectedVesselCount}<br>${currentMetricName()} interval width: ${trimStep.toFixed(2)} ${state.analysisMode === 'immersion' ? '%' : 'm'}<br>Intervals shown: n >= ${minSamples}, R² >= ${minR2.toFixed(2)}<br>Fit: P = a*v^3`,
+            bgcolor: 'rgba(255,255,255,0.93)', bordercolor: '#cbd5e1', borderwidth: 1, font: { size: 12 }
+          },
+          {
+            x: 0.99, y: 0.99, xref: 'paper', yref: 'paper', showarrow: false, align: 'right',
+            text: `a summary (v3):<br>Best a: ${bestA.toFixed(4)}<br>Worst a: ${worstA.toFixed(4)}<br>Difference: ${isFinite(diff)?diff.toFixed(1):'NA'}%`,
+            bgcolor: 'rgba(255,255,255,0.93)', bordercolor: '#cbd5e1', borderwidth: 1, font: { size: 12 }
+          }
+        ]
+      };
+
+      Plotly.newPlot('plot', traces, layout, { responsive: true, displaylogo: false });
+      state.currentTitle = `${CONFIG[state.currentTab].label.toLowerCase().replace(/\s+/g,'_')}_speed_power_v3_by_${state.analysisMode}_interval`;
+      state.currentPlotReady = true;
+    }
+
+    async function generatePlot() {
+      try {
+        setStatus('Loading CSV files...');
+        const raw = await loadClassData(state.currentTab);
+        refreshVesselSelect(raw);
+        const filtered = applyFilters(raw);
+        if (!filtered.length) {
+          setStatus('No rows remained after filters.', true);
+          return;
+        }
+
+        if (state.analysisMode === 'timeseries') {
+          state.filtered = filtered;
+          state.summary = [{
+            mode: 'timeseries',
+            rows_used: filtered.length,
+            first_date: new Date(Math.min(...filtered.map(r => r.DT))).toISOString(),
+            last_date: new Date(Math.max(...filtered.map(r => r.DT))).toISOString()
+          }];
+          state.eligible = [];
+          state.selected = new Set();
+          renderTrimChecks();
+          drawPlot();
+          setStatus(`Loaded ${raw.length.toLocaleString()} rows, using ${filtered.length.toLocaleString()} rows for Date vs Shaft Power.`);
+          return;
+        }
+
+        const trimStep = num(el('trimStep').value);
+        const minSamples = Math.max(1, Math.floor(num(el('minSamples').value)));
+        const minR2 = num(el('minR2').value);
+        if (!Number.isFinite(minR2) || minR2 < 0 || minR2 > 1) {
+          setStatus('Min R² must be between 0 and 1.', true);
+          return;
+        }
+        const valueKey = currentValueKey();
+        const intervals = buildIntervals(filtered.map(r => r[valueKey]), trimStep);
+        const assigned = assignIntervals(filtered, intervals);
+        if (!assigned.length) {
+          setStatus(`No rows assigned to ${currentMetricName().toLowerCase()} intervals.`, true);
+          return;
+        }
+
+        const { summary, eligible } = summarize(assigned, minSamples, minR2);
+        if (!eligible.length) {
+          setStatus(`No ${currentMetricName().toLowerCase()} interval met n >= ${minSamples} and R² >= ${minR2.toFixed(2)}.`, true);
+          return;
+        }
+
+        state.filtered = assigned;
+        state.summary = summary;
+        state.eligible = eligible;
+        state.selected = new Set(eligible);
+        renderTrimChecks();
+        drawPlot();
+        const selectedNow = assigned.filter(r => state.selected.has(r[currentLabelKey()])).length;
+        setStatus(`Loaded ${raw.length.toLocaleString()} rows, assigned ${assigned.length.toLocaleString()} rows to intervals, selected ${selectedNow.toLocaleString()} rows after group selection. Eligible groups: ${eligible.length} (n >= ${minSamples}, R² >= ${minR2.toFixed(2)}).`);
+      } catch (err) {
+        console.error(err);
+        setStatus(`Error: ${err.message}`, true);
+      }
+    }
+
+    function applyDefaults() {
+      const d = CONFIG[state.currentTab].defaults;
+      el('minDisp').value = d.minDisp;
+      el('maxDisp').value = d.maxDisp;
+      el('minSpeed').value = d.minSpeed;
+      el('maxSpeed').value = d.maxSpeed;
+      el('startDate').value = '';
+      el('endDate').value = '';
+      el('minWave').value = 0.0;
+      el('maxWave').value = d.maxWave;
+      el('yMin').value = '';
+      el('yMax').value = '';
+      el('trimStep').value = state.analysisMode === 'immersion' ? 10 : 0.5;
+      el('minSamples').value = 31;
+      el('minR2').value = 0.0;
+      el('minTrim').value = '';
+      el('maxTrim').value = '';
+      state.eligible = [];
+      state.selected = new Set();
+      renderTrimChecks();
+      Plotly.purge('plot');
+      el('plot').innerHTML = '';
+      state.currentPlotReady = false;
+    }
+
+    function initTabs() {
+      document.querySelectorAll('[data-tab]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          activateTab(btn.dataset.tab);
+          applyDefaults();
+          await preloadVesselsForCurrentTab();
+          setStatus(`Switched to ${CONFIG[state.currentTab].label}.`);
+        });
+      });
+    }
+
+    function activateTab(classKey) {
+      if (!CONFIG[classKey]) return;
+      state.currentTab = classKey;
+      document.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === classKey));
+    }
+
+    function initDownloads() {
+      el('downloadPngBtn').addEventListener('click', () => {
+        if (!state.currentPlotReady) return setStatus('Generate a plot first.', true);
+        Plotly.downloadImage('plot', { format: 'png', width: 1500, height: 900, filename: state.currentTitle });
+      });
+
+      el('downloadSummaryBtn').addEventListener('click', () => {
+        if (!state.summary.length) return setStatus('Generate a plot first.', true);
+        const rows = getSelectedSummary();
+        const csv = toCsv(rows);
+        downloadBlob(`${state.currentTitle}_summary.csv`, new Blob([csv], { type: 'text/csv' }));
+      });
+
+      el('downloadSamplesBtn').addEventListener('click', () => {
+        if (!state.filtered.length) return setStatus('Generate a plot first.', true);
+        const rows = getSelectedSamples().map(r => ({
+          Vessel: r.Vessel,
+          Datetime: r.DT ? new Date(r.DT).toISOString() : '',
+          Trim: r.Trim,
+          propeller_immersion_pct: r.Immersion,
+            'SPEED THROUGH WATER': r.STW,
+            'SHAFT POWER': r.Power,
+            Displacement: r.Displacement,
+            wave_height: r.Wave,
+            group_interval: r[currentLabelKey()]
+          }));
+        const csv = toCsv(rows);
+        downloadBlob(`${state.currentTitle}_samples_used.csv`, new Blob([csv], { type: 'text/csv' }));
+      });
+    }
+
+    function initSaveToPage() {
+      el('savePageBtn').addEventListener('click', async () => {
+        if (!state.currentPlotReady) return setStatus('Generate a plot first.', true);
+        const dataUrl = await Plotly.toImage('plot', { format: 'png', width: 1500, height: 900 });
+        const minDisp = num(el('minDisp').value);
+        const maxDisp = num(el('maxDisp').value);
+        const minSpeed = num(el('minSpeed').value);
+        const maxSpeed = num(el('maxSpeed').value);
+        const startDate = el('startDate').value;
+        const endDate = el('endDate').value;
+        const minWave = num(el('minWave').value);
+        const maxWave = num(el('maxWave').value);
+        const minTrim = el('minTrim').value;
+        const maxTrim = el('maxTrim').value;
+        const yMin = el('yMin').value;
+        const yMax = el('yMax').value;
+        const trimStep = num(el('trimStep').value);
+        const minSamples = Math.max(1, Math.floor(num(el('minSamples').value)));
+        const minR2 = num(el('minR2').value);
+        const selectedVessels = [...state.selectedVessels];
+        const record = {
+          title: `${CONFIG[state.currentTab].label} | ${new Date().toLocaleString()} | ${state.analysisMode} groups: ${[...state.selected].join(', ')}`,
+          dataUrl,
+          classKey: state.currentTab,
+          analysisMode: state.analysisMode,
+          controls: { minDisp, maxDisp, minSpeed, maxSpeed, startDate, endDate, minWave, maxWave, minTrim, maxTrim, yMin, yMax, trimStep, minSamples, minR2, selectedVessels },
+          filteredAll: state.filtered,
+          summaryAll: state.summary,
+          eligible: [...state.eligible],
+          selected: [...state.selected],
+          summary: getSelectedSummary(),
+          samples: getSelectedSamples().map(r => ({
+            Vessel: r.Vessel,
+            Datetime: r.DT ? new Date(r.DT).toISOString() : '',
+            Trim: r.Trim,
+            propeller_immersion_pct: r.Immersion,
+            'SPEED THROUGH WATER': r.STW,
+            'SHAFT POWER': r.Power,
+            Displacement: r.Displacement,
+            wave_height: r.Wave,
+            group_interval: r[currentLabelKey()]
+          }))
+        };
+        state.gallery.push(record);
+        renderGallery();
+        setStatus('Saved current view to webpage gallery.');
+      });
+    }
+
+    function restoreSavedSnapshot(item) {
+      activateTab(item.classKey || 'H');
+      if (item.analysisMode === 'immersion' || item.analysisMode === 'trim') {
+        state.analysisMode = item.analysisMode;
+        document.querySelectorAll('[data-analysis]').forEach(b => b.classList.toggle('active', b.dataset.analysis === state.analysisMode));
+      }
+      updateModeUI();
+      if (item.controls) {
+        el('minDisp').value = item.controls.minDisp;
+        el('maxDisp').value = item.controls.maxDisp;
+        el('minSpeed').value = item.controls.minSpeed;
+        el('maxSpeed').value = item.controls.maxSpeed;
+        el('startDate').value = item.controls.startDate ?? '';
+        el('endDate').value = item.controls.endDate ?? '';
+        el('minWave').value = item.controls.minWave ?? 0;
+        el('maxWave').value = item.controls.maxWave;
+        el('minTrim').value = item.controls.minTrim ?? '';
+        el('maxTrim').value = item.controls.maxTrim ?? '';
+        el('yMin').value = item.controls.yMin ?? '';
+        el('yMax').value = item.controls.yMax ?? '';
+        el('trimStep').value = item.controls.trimStep;
+        el('minSamples').value = item.controls.minSamples;
+        el('minR2').value = item.controls.minR2 ?? 0.0;
+      }
+      if (item.controls?.selectedVessels) {
+        const selected = new Set(item.controls.selectedVessels);
+        [...el('vesselSelect').querySelectorAll('.vessel-chip')].forEach(chip => {
+          chip.classList.toggle('active', selected.has(chip.textContent));
+        });
+        state.selectedVessels = selected;
+      }
+      state.filtered = item.filteredAll || [];
+      state.summary = item.summaryAll || [];
+      state.eligible = item.eligible || [];
+      state.selected = new Set(item.selected || []);
+      renderTrimChecks();
+      drawPlot();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      setStatus('Loaded saved plot to top editor. You can edit it again.');
+    }
+
+    function renderGallery() {
+      const g = el('gallery');
+      g.innerHTML = '';
+      state.gallery.forEach((item, idx) => {
+        const card = document.createElement('div');
+        card.className = 'shot';
+        card.innerHTML = `<h4>${idx + 1}. ${item.title}</h4><img class="clickable" src="${item.dataUrl}" alt="saved plot" title="Click to load this at top for editing" />`;
+        const img = card.querySelector('img');
+        img.addEventListener('click', () => restoreSavedSnapshot(item));
+        const dl = document.createElement('div');
+        dl.className = 'dl';
+
+        const b0 = document.createElement('button');
+        b0.textContent = 'Edit this';
+        b0.onclick = () => restoreSavedSnapshot(item);
+
+        const b1 = document.createElement('button');
+        b1.textContent = 'PNG';
+        b1.onclick = () => {
+          const a = document.createElement('a'); a.href = item.dataUrl; a.download = `saved_plot_${idx+1}.png`; a.click();
+        };
+
+        const b2 = document.createElement('button');
+        b2.textContent = 'Summary CSV';
+        b2.onclick = () => downloadBlob(`saved_plot_${idx+1}_summary.csv`, new Blob([toCsv(item.summary)], { type: 'text/csv' }));
+
+        const b3 = document.createElement('button');
+        b3.textContent = 'Samples CSV';
+        b3.onclick = () => downloadBlob(`saved_plot_${idx+1}_samples.csv`, new Blob([toCsv(item.samples)], { type: 'text/csv' }));
+
+        dl.append(b0,b1,b2,b3);
+        card.appendChild(dl);
+        g.appendChild(card);
+      });
+    }
+
+    function initToggleAll() {
+      el('toggleAllBtn').addEventListener('click', () => {
+        if (!state.eligible.length) return;
+        if (state.selected.size === state.eligible.length) state.selected.clear();
+        else state.selected = new Set(state.eligible);
+        renderTrimChecks();
+        drawPlot();
+      });
+    }
+
+    function init() {
+      const protocolWarning = el('protocolWarning');
+      if (window.location.protocol === 'file:') protocolWarning.style.display = 'block';
+      initTabs();
+      document.querySelectorAll('[data-analysis]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.analysisMode = btn.dataset.analysis;
+          document.querySelectorAll('[data-analysis]').forEach(b => b.classList.toggle('active', b === btn));
+          updateModeUI();
+          applyDefaults();
+          setStatus(`Switched to ${state.analysisMode === 'immersion' ? 'Propeller Immersion' : 'Trim'} mode.`);
+        });
+      });
+      initDownloads();
+      initSaveToPage();
+      initToggleAll();
+      el('generateBtn').addEventListener('click', generatePlot);
+      applyDefaults();
+      updateModeUI();
+      preloadVesselsForCurrentTab().then(() => {
+        setStatus('Ready. Choose filters and click Generate Plot.');
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>

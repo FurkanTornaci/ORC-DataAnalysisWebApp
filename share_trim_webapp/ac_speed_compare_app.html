@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vessel Performance Comparison App</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <style>
+    :root {
+      --bg: #f3f6fa;
+      --card: #ffffff;
+      --ink: #122033;
+      --muted: #5c6f86;
+      --line: #d9e1ea;
+      --accent: #0f6fff;
+      --accent2: #e45756;
+      --ok: #1d8f6a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      background: radial-gradient(1200px 500px at 85% -10%, #e8f1ff, var(--bg) 45%);
+    }
+    .wrap { width: 100%; padding: 18px; }
+    .head { margin-bottom: 12px; }
+    h1 { margin: 0 0 4px; font-size: 28px; }
+    .sub { color: var(--muted); }
+    .layout { display: grid; grid-template-columns: 390px 1fr; gap: 14px; align-items: start; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+    }
+    .controls .row { margin-bottom: 10px; }
+    .controls label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+    .controls input, .controls select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px;
+      font-size: 14px;
+      background: #fff;
+    }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 10px; }
+    .tab {
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+    button {
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 8px;
+      padding: 9px 10px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    #plot { width: 100%; min-height: 78vh; }
+    #status { color: var(--muted); font-size: 13px; min-height: 18px; margin-top: 8px; }
+    .summary {
+      margin-top: 8px;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #d5e6df;
+      background: #f6fffb;
+      font-size: 13px;
+    }
+    .summary b { color: var(--ok); }
+    @media (max-width: 1100px) {
+      .layout { grid-template-columns: 1fr; }
+      #plot { min-height: 60vh; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <h1>Vessel Performance Comparison</h1>
+      <div class="sub">Compare two time windows using Admiralty Coefficient and speed-to-power behavior under consistent operating filters.</div>
+    </div>
+
+    <div class="layout">
+      <div class="card controls">
+        <div class="row">
+          <label>Vessel dataset</label>
+          <select id="vessel"></select>
+        </div>
+
+        <div class="grid2">
+          <div class="row">
+            <label>Split date</label>
+            <input type="date" id="splitDate" value="2025-11-01" />
+          </div>
+          <div class="row">
+            <label>Period length (months)</label>
+            <input type="number" id="periodMonths" value="4" min="1" max="24" />
+          </div>
+        </div>
+
+        <div class="grid2">
+          <div class="row">
+            <label>Min speed (kn)</label>
+            <input type="number" step="0.1" id="minSpeed" value="10" />
+          </div>
+          <div class="row">
+            <label>Max speed (kn)</label>
+            <input type="number" step="0.1" id="maxSpeed" value="14" />
+          </div>
+        </div>
+
+        <div class="grid2">
+          <div class="row">
+            <label>Min displacement (MT)</label>
+            <input type="number" id="minDisp" value="0" />
+          </div>
+          <div class="row">
+            <label>Max displacement (MT)</label>
+            <input type="number" id="maxDisp" value="120000" />
+          </div>
+        </div>
+
+        <div class="grid2">
+          <div class="row">
+            <label>Max wave height (m)</label>
+            <input type="number" step="0.1" id="maxWave" value="1.0" />
+          </div>
+          <div class="row">
+            <label>Min points per group</label>
+            <input type="number" step="1" id="minGroupN" value="20" />
+          </div>
+        </div>
+
+        <div class="btns">
+          <button class="primary" id="runBtn">Run Analysis</button>
+          <button id="pngBtn">Download PNG</button>
+        </div>
+        <div id="status"></div>
+        <div id="summary" class="summary">Run analysis to see metrics.</div>
+      </div>
+
+      <div class="card">
+        <div class="tabs">
+          <button class="tab active" data-tab="ac">AC Comparison</button>
+          <button class="tab" data-tab="sp">Speed-Power Curves</button>
+        </div>
+        <div id="plot"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const DATASETS = [
+      { label: 'Hermine (1h with weather)', file: 'hermine_smart_1h_with_condition_and_weather.csv' },
+      { label: 'Hedwig (1h with weather)', file: 'hedwig_smart_1h_with_condition_and_weather.csv' },
+      { label: 'Hille (1h with weather)', file: 'hille_smart_1h_with_condition_and_weather.csv' },
+      { label: 'Helga (1h with weather)', file: 'helga_smart_1h_with_condition_and_weather.csv' },
+      { label: 'Heide (1h with weather)', file: 'heide_smart_1h_with_condition_and_weather.csv' },
+      { label: 'Hauke (1h with weather)', file: 'hauke_smart_1h_with_condition_and_weather.csv' }
+    ];
+
+    const SPEED_COL = 'SPEED THROUGH WATER';
+    const POWER_COL = 'SHAFT POWER';
+    const DISP_COL = 'Displacement';
+    const WAVE_COL = 'wave_height';
+
+    const state = {
+      activeTab: 'ac',
+      cache: new Map(),
+      result: null,
+      currentTitle: ''
+    };
+
+    const el = id => document.getElementById(id);
+
+    function setStatus(msg, isErr = false) {
+      const node = el('status');
+      node.textContent = msg;
+      node.style.color = isErr ? '#b00020' : '#5c6f86';
+    }
+
+    function runningFromFileProtocol() {
+      return window.location.protocol === 'file:';
+    }
+
+    function addMonthsUTC(date, months) {
+      const d = new Date(date.getTime());
+      const day = d.getUTCDate();
+      d.setUTCDate(1);
+      d.setUTCMonth(d.getUTCMonth() + months);
+      const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+      d.setUTCDate(Math.min(day, lastDay));
+      return d;
+    }
+
+    function parseDateFromRow(r) {
+      const candidates = [r.Datetime, r.UTC, r.datetime];
+      for (const c of candidates) {
+        if (c) {
+          const d = new Date(c);
+          if (!Number.isNaN(d.getTime())) return d;
+        }
+      }
+      if (r.Date && r.Time) {
+        const d = new Date(`${r.Date} ${r.Time} UTC`);
+        if (!Number.isNaN(d.getTime())) return d;
+      }
+      return null;
+    }
+
+    function toNum(v) {
+      const x = Number(v);
+      return Number.isFinite(x) ? x : NaN;
+    }
+
+    async function fetchFirstAvailable(paths) {
+      let lastErr = null;
+      for (const p of paths) {
+        try {
+          const res = await fetch(p);
+          if (res.ok) return { res, path: p };
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+      if (lastErr) throw lastErr;
+      throw new Error(`Could not load any dataset path: ${paths.join(', ')}`);
+    }
+
+    async function loadRows(datasetFile) {
+      if (state.cache.has(datasetFile)) return state.cache.get(datasetFile);
+      const candidates = [
+        `data/h/${datasetFile}`,
+        `./data/h/${datasetFile}`,
+        `share_trim_webapp/data/h/${datasetFile}`,
+        `./share_trim_webapp/data/h/${datasetFile}`
+      ];
+      const { res } = await fetchFirstAvailable(candidates);
+      const parsed = Papa.parse(await res.text(), { header: true, skipEmptyLines: true });
+      const rows = parsed.data.map(r => {
+        const dt = parseDateFromRow(r);
+        return {
+          dt,
+          speed: toNum(r[SPEED_COL]),
+          power: toNum(r[POWER_COL]),
+          disp: toNum(r[DISP_COL]),
+          wave: toNum(r[WAVE_COL])
+        };
+      }).filter(r => r.dt && Number.isFinite(r.speed) && Number.isFinite(r.power) && Number.isFinite(r.disp) && Number.isFinite(r.wave));
+      state.cache.set(datasetFile, rows);
+      return rows;
+    }
+
+    function acValue(disp, speed, power) {
+      if (power <= 0 || disp <= 0 || speed <= 0) return NaN;
+      return Math.pow(disp, 2 / 3) * Math.pow(speed, 3) / power;
+    }
+
+    function fitA(points) {
+      let num = 0;
+      let den = 0;
+      for (const p of points) {
+        const x = Math.pow(p.speed, 3);
+        num += x * p.power;
+        den += x * x;
+      }
+      return den > 1e-12 ? num / den : NaN;
+    }
+
+    function analyze(rows, cfg) {
+      const split = new Date(`${cfg.splitDate}T00:00:00Z`);
+      const beforeStart = addMonthsUTC(split, -cfg.periodMonths);
+      const beforeEnd = new Date(split.getTime() - 1000);
+      const afterStart = split;
+      const afterEnd = new Date(addMonthsUTC(split, cfg.periodMonths).getTime() - 1000);
+
+      const filtered = rows.filter(r => (
+        r.speed >= cfg.minSpeed && r.speed <= cfg.maxSpeed &&
+        r.disp >= cfg.minDisp && r.disp <= cfg.maxDisp &&
+        r.wave < cfg.maxWave &&
+        r.power > 0
+      ));
+
+      const inWindow = filtered.filter(r => r.dt >= beforeStart && r.dt <= afterEnd);
+      const before = inWindow.filter(r => r.dt >= beforeStart && r.dt <= beforeEnd);
+      const after = inWindow.filter(r => r.dt >= afterStart && r.dt <= afterEnd);
+
+      const beforeAc = before.map(r => acValue(r.disp, r.speed, r.power)).filter(Number.isFinite);
+      const afterAc = after.map(r => acValue(r.disp, r.speed, r.power)).filter(Number.isFinite);
+
+      const beforeMedian = median(beforeAc);
+      const afterMedian = median(afterAc);
+      const changePct = Number.isFinite(beforeMedian) && beforeMedian !== 0
+        ? ((afterMedian - beforeMedian) / beforeMedian) * 100
+        : NaN;
+
+      return {
+        split, beforeStart, beforeEnd, afterStart, afterEnd,
+        before, after, beforeAc, afterAc,
+        beforeMedian, afterMedian, changePct,
+        aBefore: fitA(before),
+        aAfter: fitA(after)
+      };
+    }
+
+    function median(values) {
+      if (!values.length) return NaN;
+      const s = [...values].sort((a,b) => a-b);
+      const m = Math.floor(s.length / 2);
+      return s.length % 2 ? s[m] : (s[m-1] + s[m]) / 2;
+    }
+
+    function fmtDate(d) {
+      return d.toISOString().slice(0, 10);
+    }
+
+    function renderSummary(vesselLabel, cfg, r) {
+      const ok = r.before.length >= cfg.minGroupN && r.after.length >= cfg.minGroupN;
+      const html = [
+        `<div><b>${vesselLabel}</b></div>`,
+        `<div>Before window: ${fmtDate(r.beforeStart)} to ${fmtDate(r.beforeEnd)} (n=${r.before.length})</div>`,
+        `<div>After window: ${fmtDate(r.afterStart)} to ${fmtDate(r.afterEnd)} (n=${r.after.length})</div>`,
+        `<div>Median AC: before ${Number.isFinite(r.beforeMedian) ? r.beforeMedian.toFixed(2) : 'NA'} | after ${Number.isFinite(r.afterMedian) ? r.afterMedian.toFixed(2) : 'NA'} | change ${Number.isFinite(r.changePct) ? (r.changePct >= 0 ? '+' : '') + r.changePct.toFixed(2) + '%' : 'NA'}</div>`,
+        `<div>V³ fit a: before ${Number.isFinite(r.aBefore) ? r.aBefore.toFixed(4) : 'NA'} | after ${Number.isFinite(r.aAfter) ? r.aAfter.toFixed(4) : 'NA'}</div>`,
+        `<div>Filters: speed ${cfg.minSpeed}-${cfg.maxSpeed} kn, displacement ${cfg.minDisp.toLocaleString()}-${cfg.maxDisp.toLocaleString()} MT, wave &lt; ${cfg.maxWave} m</div>`,
+        `<div>${ok ? 'Group size check: OK' : `Group size check: below threshold (min ${cfg.minGroupN})`}</div>`
+      ];
+      el('summary').innerHTML = html.join('');
+    }
+
+    function plotAC(vesselLabel, cfg, r) {
+      const traces = [
+        {
+          y: r.beforeAc,
+          type: 'box',
+          name: `Before (${fmtDate(r.beforeStart)} to ${fmtDate(r.beforeEnd)})\n n=${r.before.length}`,
+          marker: { color: '#4C78A8' },
+          boxpoints: false
+        },
+        {
+          y: r.afterAc,
+          type: 'box',
+          name: `After (${fmtDate(r.afterStart)} to ${fmtDate(r.afterEnd)})\n n=${r.after.length}`,
+          marker: { color: '#E45756' },
+          boxpoints: false
+        }
+      ];
+
+      const title = `${vesselLabel} | Admiralty Coefficient Comparison`;
+      state.currentTitle = title;
+      Plotly.newPlot('plot', traces, {
+        title: { text: title },
+        yaxis: { title: 'Admiralty Coefficient (AC)' },
+        xaxis: { title: `Period groups (${cfg.periodMonths} months before vs ${cfg.periodMonths} months after split)` },
+        margin: { l: 80, r: 20, t: 70, b: 90 },
+        paper_bgcolor: '#fff',
+        plot_bgcolor: '#fff',
+        annotations: [{
+          x: 0.5, y: -0.22, xref: 'paper', yref: 'paper', showarrow: false,
+          text: `Median AC change: ${Number.isFinite(r.changePct) ? (r.changePct >= 0 ? '+' : '') + r.changePct.toFixed(2) + '%' : 'NA'}`
+        }]
+      }, { responsive: true, displaylogo: false });
+    }
+
+    function plotSP(vesselLabel, cfg, r) {
+      const before = r.before;
+      const after = r.after;
+      const aB = r.aBefore;
+      const aA = r.aAfter;
+
+      const traces = [
+        {
+          x: before.map(p => p.speed),
+          y: before.map(p => p.power),
+          mode: 'markers',
+          type: 'scattergl',
+          name: `Before samples (n=${before.length})`,
+          marker: { size: 6, color: '#4C78A8', opacity: 0.18 }
+        },
+        {
+          x: after.map(p => p.speed),
+          y: after.map(p => p.power),
+          mode: 'markers',
+          type: 'scattergl',
+          name: `After samples (n=${after.length})`,
+          marker: { size: 6, color: '#E45756', opacity: 0.18 }
+        }
+      ];
+
+      const speedMin = cfg.minSpeed;
+      const speedMax = cfg.maxSpeed;
+      const xs = [];
+      for (let i=0;i<150;i++) xs.push(speedMin + (speedMax-speedMin)*(i/149));
+      if (Number.isFinite(aB)) traces.push({ x: xs, y: xs.map(v => aB * Math.pow(v,3)), mode: 'lines', type: 'scatter', name: `Before fit P=aV³ (a=${aB.toFixed(4)})`, line: { width: 3, color: '#4C78A8' } });
+      if (Number.isFinite(aA)) traces.push({ x: xs, y: xs.map(v => aA * Math.pow(v,3)), mode: 'lines', type: 'scatter', name: `After fit P=aV³ (a=${aA.toFixed(4)})`, line: { width: 3, color: '#E45756' } });
+
+      const title = `${vesselLabel} | Speed to Power Curve Comparison`;
+      state.currentTitle = title;
+      Plotly.newPlot('plot', traces, {
+        title: { text: title },
+        xaxis: { title: 'Speed Through Water (kn)' },
+        yaxis: { title: 'Shaft Power (kW)' },
+        margin: { l: 80, r: 20, t: 70, b: 70 },
+        legend: { orientation: 'h', y: -0.25 },
+        paper_bgcolor: '#fff',
+        plot_bgcolor: '#fff'
+      }, { responsive: true, displaylogo: false });
+    }
+
+    function draw() {
+      if (!state.result) return;
+      const vesselLabel = el('vessel').selectedOptions[0].textContent;
+      const cfg = state.result.cfg;
+      if (state.activeTab === 'ac') plotAC(vesselLabel, cfg, state.result.analysis);
+      else plotSP(vesselLabel, cfg, state.result.analysis);
+    }
+
+    async function runAnalysis() {
+      try {
+        if (runningFromFileProtocol()) {
+          throw new Error(
+            "This page is opened as file:// and browser security blocks CSV loading. " +
+            "Run via HTTP: python -m http.server 8000 (inside share_trim_webapp) then open http://127.0.0.1:8000/ac_speed_compare_app.html"
+          );
+        }
+        const ds = DATASETS[Number(el('vessel').value)];
+        const cfg = {
+          splitDate: el('splitDate').value,
+          periodMonths: Math.max(1, Math.floor(Number(el('periodMonths').value))),
+          minSpeed: Number(el('minSpeed').value),
+          maxSpeed: Number(el('maxSpeed').value),
+          minDisp: Number(el('minDisp').value),
+          maxDisp: Number(el('maxDisp').value),
+          maxWave: Number(el('maxWave').value),
+          minGroupN: Math.max(1, Math.floor(Number(el('minGroupN').value)))
+        };
+        setStatus('Loading data and calculating...');
+        const rows = await loadRows(ds.file);
+        const analysis = analyze(rows, cfg);
+        state.result = { cfg, analysis };
+        renderSummary(ds.label, cfg, analysis);
+        draw();
+        setStatus(`Done. Total valid rows in selected windows: ${analysis.before.length + analysis.after.length}.`);
+      } catch (err) {
+        console.error(err);
+        setStatus(`Error: ${err.message}`, true);
+      }
+    }
+
+    function init() {
+      const sel = el('vessel');
+      DATASETS.forEach((d, i) => {
+        const o = document.createElement('option');
+        o.value = i;
+        o.textContent = d.label;
+        sel.appendChild(o);
+      });
+      sel.value = 0;
+
+      document.querySelectorAll('.tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          state.activeTab = btn.dataset.tab;
+          draw();
+        });
+      });
+
+      el('runBtn').addEventListener('click', runAnalysis);
+      el('pngBtn').addEventListener('click', () => {
+        if (!state.currentTitle) return;
+        Plotly.downloadImage('plot', { format: 'png', filename: state.currentTitle.toLowerCase().replace(/[^a-z0-9]+/g,'_'), width: 1600, height: 950, scale: 2 });
+      });
+
+      if (runningFromFileProtocol()) {
+        setStatus(
+          "Open via HTTP, not file://. Example: run `python -m http.server 8000` in `share_trim_webapp`, then open http://127.0.0.1:8000/ac_speed_compare_app.html",
+          true
+        );
+      } else {
+        runAnalysis();
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
