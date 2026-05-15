@@ -1,6 +1,3 @@
-*
-!vercel.json
-!.vercelignore
-!index.html
-!ac-speed-compare/**
-!share_trim_webapp/**
+.DS_Store
+.git
+.vercel
