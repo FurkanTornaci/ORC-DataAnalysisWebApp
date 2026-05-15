@@ -795,19 +795,20 @@
         legend: { orientation: 'h', x: 0.5, y: -0.16, xanchor: 'center', yanchor: 'top', bgcolor: 'rgba(255,255,255,0.65)' }
       }, { responsive: true, displaylogo: false });
 
-      const boxTraces = groupStats.map((g, idx) => ({
-        type: 'box',
-        name: g.label,
-        y: byWaveGroup.get(g.label).map(r => r.Trim),
-        marker: { color: PALETTE[idx % PALETTE.length] },
-        boxpoints: 'outliers',
-        jitter: 0.25,
-        pointpos: 0
-      }));
+      const boxTraces = [{
+        type: 'scatter',
+        mode: 'lines+markers',
+        name: 'Mean Trim',
+        x: groupStats.map(g => g.label),
+        y: groupStats.map(g => g.meanTrim),
+        line: { color: '#1f8f4f', width: 3 },
+        marker: { color: '#1f8f4f', size: 8 },
+        hovertemplate: 'Interval=%{x}<br>Mean Trim=%{y:.2f} m<extra></extra>'
+      }];
       const boxDiv = el('boxPlot');
       boxDiv.style.display = '';
       Plotly.newPlot('boxPlot', boxTraces, {
-        title: { text: `${CONFIG[state.currentTab].label} | Trim Distribution by Wave Interval` },
+        title: { text: `${CONFIG[state.currentTab].label} | Mean Trim by Wave Interval` },
         xaxis: { title: 'Wave Interval (m)' },
         yaxis: { title: 'Trim (m)', gridcolor: '#e6ebf2' },
         plot_bgcolor: '#ffffff',
