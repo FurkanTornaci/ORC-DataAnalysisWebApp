@@ -746,7 +746,6 @@
         if (!byWaveGroup.has(iv.label)) byWaveGroup.set(iv.label, []);
         byWaveGroup.get(iv.label).push(r);
       }
-      const markerSymbols = ['circle', 'square', 'diamond', 'triangle-up', 'triangle-down', 'cross', 'x', 'pentagon', 'hexagon', 'star'];
       const traces = [];
       const groupStats = [];
       const sortedGroups = [...byWaveGroup.entries()].sort((a, b) => parseFloat(a[0]) - parseFloat(b[0]));
@@ -758,11 +757,11 @@
           y: rows.map(r => r.Trim),
           mode: 'markers',
           type: 'scattergl',
-          name: `${label} (n=${rows.length}, mean trim=${meanTrim.toFixed(2)} m)`,
+          name: `${label}`,
           marker: {
             size: 7,
             opacity: 0.72,
-            symbol: markerSymbols[idx % markerSymbols.length],
+            symbol: 'circle',
             color: PALETTE[idx % PALETTE.length]
           }
         });
