@@ -738,10 +738,10 @@
         yaxis: { title: 'Trim (m)', gridcolor: '#e6ebf2', range: (yMin !== null && yMax !== null) ? [yMin, yMax] : undefined },
         plot_bgcolor: '#ffffff',
         paper_bgcolor: '#ffffff',
-        margin: { l: 70, r: 30, t: 80, b: 190 },
+        margin: { l: 70, r: 30, t: 80, b: 260 },
         legend: { orientation: 'h', x: 0, y: -0.18, xanchor: 'left', yanchor: 'top', bgcolor: 'rgba(255,255,255,0.65)' },
         annotations: [{
-          x: 0, y: -0.33, xref: 'paper', yref: 'paper', showarrow: false, align: 'left',
+          x: 0, y: -0.52, xref: 'paper', yref: 'paper', showarrow: false, align: 'left',
           text: `Filters:<br>Displacement ${minDisp.toLocaleString()}-${maxDisp.toLocaleString()} MT<br>Trim ${minTrim} to ${maxTrim} m<br>Wave height ${minWave.toFixed(2)} to ${maxWave.toFixed(2)} m<br>Speed ${minSpeed.toFixed(2)}-${maxSpeed.toFixed(2)} kn<br>Date ${startDate} to ${endDate}<br>Rows used: ${samples.length.toLocaleString()}`,
           bgcolor: 'rgba(255,255,255,0.93)', bordercolor: '#cbd5e1', borderwidth: 1, font: { size: 12 }
         }]
@@ -824,16 +824,16 @@
         yaxis: { title: 'Shaft Power (kW)', gridcolor: '#e6ebf2', range: (yMin !== null && yMax !== null) ? [yMin, yMax] : undefined },
         plot_bgcolor: '#ffffff',
         paper_bgcolor: '#ffffff',
-        margin: { l: 70, r: 30, t: 80, b: 210 },
+        margin: { l: 70, r: 30, t: 80, b: 290 },
         legend: { orientation: 'h', x: 0, y: -0.18, xanchor: 'left', yanchor: 'top', bgcolor: 'rgba(255,255,255,0.65)' },
         annotations: [
           {
-            x: 0, y: -0.33, xref: 'paper', yref: 'paper', showarrow: false, align: 'left',
+            x: 0, y: -0.58, xref: 'paper', yref: 'paper', showarrow: false, align: 'left',
             text: `Filters:<br>Displacement ${minDisp.toLocaleString()}-${maxDisp.toLocaleString()} MT<br>Wave height ${minWave.toFixed(2)} to ${maxWave.toFixed(2)} m<br>Speed ${minSpeed.toFixed(2)}-${maxSpeed.toFixed(2)} kn<br>Date ${startDate} to ${endDate}<br>Vessels selected: ${selectedVesselCount}<br>${currentMetricName()} interval width: ${trimStep.toFixed(2)} ${state.analysisMode === 'immersion' ? '%' : 'm'}<br>Intervals shown: n >= ${minSamples}, R² >= ${minR2.toFixed(2)}<br>Fit: P = a*v^3`,
             bgcolor: 'rgba(255,255,255,0.93)', bordercolor: '#cbd5e1', borderwidth: 1, font: { size: 12 }
           },
           {
-            x: 1, y: -0.33, xref: 'paper', yref: 'paper', showarrow: false, align: 'right',
+            x: 1, y: -0.58, xref: 'paper', yref: 'paper', showarrow: false, align: 'right',
             text: `a summary (v3):<br>Best a: ${bestA.toFixed(4)}<br>Worst a: ${worstA.toFixed(4)}<br>Difference: ${isFinite(diff)?diff.toFixed(1):'NA'}%`,
             bgcolor: 'rgba(255,255,255,0.93)', bordercolor: '#cbd5e1', borderwidth: 1, font: { size: 12 }
           }
