@@ -767,8 +767,8 @@
         yaxis: { title: 'Trim (m)', gridcolor: '#e6ebf2', range: (yMin !== null && yMax !== null) ? [yMin, yMax] : undefined },
         plot_bgcolor: '#ffffff',
         paper_bgcolor: '#ffffff',
-        margin: { l: 70, r: 30, t: 80, b: 80 },
-        legend: { orientation: 'v', x: 1.01, y: 1, xanchor: 'left', yanchor: 'top', bgcolor: 'rgba(255,255,255,0.65)' }
+        margin: { l: 70, r: 30, t: 80, b: 150 },
+        legend: { orientation: 'v', x: 0, y: -0.16, xanchor: 'left', yanchor: 'top', bgcolor: 'rgba(255,255,255,0.65)' }
       }, { responsive: true, displaylogo: false });
       state.currentTitle = `${CONFIG[state.currentTab].label.toLowerCase().replace(/\s+/g,'_')}_displacement_vs_trim`;
       state.currentPlotReady = true;
@@ -852,8 +852,8 @@
         yaxis: { title: 'Shaft Power (kW)', gridcolor: '#e6ebf2', range: (yMin !== null && yMax !== null) ? [yMin, yMax] : undefined },
         plot_bgcolor: '#ffffff',
         paper_bgcolor: '#ffffff',
-        margin: { l: 70, r: 30, t: 80, b: 80 },
-        legend: { orientation: 'v', x: 1.01, y: 1, xanchor: 'left', yanchor: 'top', bgcolor: 'rgba(255,255,255,0.65)' }
+        margin: { l: 70, r: 30, t: 80, b: 170 },
+        legend: { orientation: 'v', x: 0, y: -0.18, xanchor: 'left', yanchor: 'top', bgcolor: 'rgba(255,255,255,0.65)' }
       };
 
       Plotly.newPlot('plot', traces, layout, { responsive: true, displaylogo: false });
