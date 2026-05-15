@@ -81,9 +81,69 @@
       .layout { grid-template-columns: 1fr; }
       #plot { min-height: 60vh; }
     }
+    .auth-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(16, 23, 34, 0.92);
+      padding: 16px;
+    }
+    .auth-card {
+      width: 100%;
+      max-width: 420px;
+      background: #fff;
+      border-radius: 12px;
+      border: 1px solid #d7dce3;
+      padding: 16px;
+    }
+    .auth-card h2 { margin: 0 0 8px; font-size: 22px; }
+    .auth-card p { margin: 0 0 12px; color: #5e6f86; }
+    .auth-card .row { margin-bottom: 10px; }
+    .auth-card input {
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid #d9e1ea;
+      font-size: 14px;
+    }
+    .auth-card button {
+      width: 100%;
+      background: var(--accent);
+      color: #fff;
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .auth-error {
+      min-height: 18px;
+      margin-top: 8px;
+      font-size: 13px;
+      color: #b00020;
+    }
   </style>
 </head>
 <body>
+  <div id="authOverlay" class="auth-overlay">
+    <div class="auth-card">
+      <h2>ORC Access</h2>
+      <p>Enter valid credentials to access this system.</p>
+      <div class="row">
+        <label for="authUser">Username</label>
+        <input id="authUser" type="text" autocomplete="username" />
+      </div>
+      <div class="row">
+        <label for="authPass">Password</label>
+        <input id="authPass" type="password" autocomplete="current-password" />
+      </div>
+      <button id="authBtn" type="button">Login</button>
+      <div id="authError" class="auth-error"></div>
+    </div>
+  </div>
   <div class="wrap">
     <div class="head">
       <h1>Vessel Performance Comparison</h1>
@@ -160,6 +220,41 @@
   </div>
 
   <script>
+    const AUTH_USER = 'ORC';
+    const AUTH_PASS = 'PM£z>H8p6V4T';
+    const AUTH_KEY = 'orc_auth_ok';
+
+    function requireAuth() {
+      const overlay = document.getElementById('authOverlay');
+      const userEl = document.getElementById('authUser');
+      const passEl = document.getElementById('authPass');
+      const btnEl = document.getElementById('authBtn');
+      const errEl = document.getElementById('authError');
+
+      if (sessionStorage.getItem(AUTH_KEY) === '1') {
+        overlay.style.display = 'none';
+        return Promise.resolve();
+      }
+
+      return new Promise(resolve => {
+        const tryLogin = () => {
+          if (userEl.value === AUTH_USER && passEl.value === AUTH_PASS) {
+            sessionStorage.setItem(AUTH_KEY, '1');
+            overlay.style.display = 'none';
+            resolve();
+            return;
+          }
+          errEl.textContent = 'Invalid username or password.';
+          passEl.value = '';
+          passEl.focus();
+        };
+        btnEl.addEventListener('click', tryLogin);
+        passEl.addEventListener('keydown', e => {
+          if (e.key === 'Enter') tryLogin();
+        });
+        userEl.focus();
+      });
+    }
     const DATASETS = [
       { label: 'Hermine (1h with weather)', file: 'hermine_smart_1h_with_condition_and_weather.csv' },
       { label: 'Hedwig (1h with weather)', file: 'hedwig_smart_1h_with_condition_and_weather.csv' },
@@ -457,7 +552,8 @@
       }
     }
 
-    function init() {
+    async function init() {
+      await requireAuth();
       const sel = el('vessel');
       DATASETS.forEach((d, i) => {
         const o = document.createElement('option');
