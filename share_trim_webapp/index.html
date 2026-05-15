@@ -757,9 +757,16 @@
       const maxTrim = el('maxTrim').value.trim() || 'auto';
       const startDate = el('startDate').value || 'auto';
       const endDate = el('endDate').value || 'auto';
+      const vesselTrimMeans = [...byVessel.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([vessel, rows]) => {
+          const avg = rows.reduce((acc, r) => acc + r.Trim, 0) / rows.length;
+          return `${vessel}: ${avg.toFixed(2)} m`;
+        })
+        .join('<br>');
       renderMeta(
         `<b>Filters</b><br>Displacement ${minDisp.toLocaleString()}-${maxDisp.toLocaleString()} MT<br>Trim ${minTrim} to ${maxTrim} m<br>Wave ${minWave.toFixed(2)}-${maxWave.toFixed(2)} m<br>Speed ${minSpeed.toFixed(2)}-${maxSpeed.toFixed(2)} kn<br>Date ${startDate} to ${endDate}<br>Rows used: ${samples.length.toLocaleString()}`,
-        `<b>Summary</b><br>Mode: Displacement vs Trim<br>Vessels: ${byVessel.size}`
+        `<b>Summary</b><br>Mode: Displacement vs Trim<br>Vessels: ${byVessel.size}<br><br><b>Mean Trim by Vessel</b><br>${vesselTrimMeans}`
       );
       Plotly.newPlot('plot', traces, {
         title: { text: `${CONFIG[state.currentTab].label} | Displacement vs Trim` },
