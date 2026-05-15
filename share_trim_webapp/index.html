@@ -234,7 +234,7 @@
     <div class="tabs">
       <button class="tab active" data-analysis="trim">Trim Intervals</button>
       <button class="tab" data-analysis="immersion">Propeller Immersion Intervals</button>
-      <button class="tab" data-analysis="timeseries">Date vs Shaft Power</button>
+      <button class="tab" data-analysis="disptrim">Displacement vs Trim</button>
     </div>
 
     <div class="grid">
@@ -257,8 +257,8 @@
           <div class="row"><label id="intervalStepLabel">Trim interval width (m)</label><input type="number" step="0.1" id="trimStep" value="0.5" /></div>
           <div class="row"><label>Min samples/interval</label><input type="number" step="1" id="minSamples" value="31" /></div>
           <div class="row"><label>Min R²/interval</label><input type="number" step="0.01" min="0" max="1" id="minR2" value="0.00" /></div>
-          <div class="row"><label>Min trim (m, optional)</label><input type="number" step="0.1" id="minTrim" placeholder="auto" /></div>
-          <div class="row"><label>Max trim (m, optional)</label><input type="number" step="0.1" id="maxTrim" placeholder="auto" /></div>
+          <div class="row"><label>Min trim (m)</label><input type="number" step="0.1" id="minTrim" placeholder="auto" /></div>
+          <div class="row"><label>Max trim (m)</label><input type="number" step="0.1" id="maxTrim" placeholder="auto" /></div>
         </div>
 
         <div class="row">
@@ -398,17 +398,17 @@
     }
 
     function currentLabelKey() {
-      if (state.analysisMode === 'timeseries') return null;
+      if (state.analysisMode === 'disptrim') return null;
       return state.analysisMode === 'immersion' ? 'immersionLabel' : 'trimLabel';
     }
 
     function currentValueKey() {
-      if (state.analysisMode === 'timeseries') return null;
+      if (state.analysisMode === 'disptrim') return null;
       return state.analysisMode === 'immersion' ? 'Immersion' : 'Trim';
     }
 
     function updateModeUI() {
-      const intervalMode = state.analysisMode !== 'timeseries';
+      const intervalMode = state.analysisMode === 'trim' || state.analysisMode === 'immersion';
       el('intervalStepLabel').textContent = state.analysisMode === 'immersion'
         ? 'Immersion interval width (%)'
         : 'Trim interval width (m)';
@@ -420,7 +420,7 @@
       el('minR2').closest('.row').style.display = intervalMode ? '' : 'none';
       el('toggleAllBtn').style.display = intervalMode ? '' : 'none';
       if (!intervalMode) {
-        el('groupListLabel').textContent = 'Groups are not used in Date vs Shaft Power mode';
+        el('groupListLabel').textContent = 'Groups are not used in Displacement vs Trim mode';
       }
     }
 
@@ -593,9 +593,11 @@
       const selectedV = state.selectedVessels.size ? state.selectedVessels : new Set(state.availableVessels);
       const valueKey = currentValueKey();
       return rows.filter(r => (
-        (state.analysisMode === 'timeseries' || Number.isFinite(r[valueKey])) && Number.isFinite(r.STW) && Number.isFinite(r.Power) &&
+        (state.analysisMode === 'disptrim' || Number.isFinite(r[valueKey])) && Number.isFinite(r.STW) &&
+        (state.analysisMode === 'disptrim' || Number.isFinite(r.Power)) &&
         Number.isFinite(r.Displacement) && Number.isFinite(r.Wave) &&
-        r.Power > 0 &&
+        Number.isFinite(r.Trim) &&
+        (state.analysisMode === 'disptrim' || r.Power > 0) &&
         r.Displacement >= minDisp && r.Displacement <= maxDisp &&
         r.STW >= minSpeed && r.STW <= maxSpeed &&
         selectedV.has(r.Vessel) &&
@@ -683,17 +685,17 @@
     }
 
     function getSelectedSummary() {
-      if (state.analysisMode === 'timeseries') return state.summary || [];
+      if (state.analysisMode === 'disptrim') return state.summary || [];
       return state.summary.filter(r => state.selected.has(r.group_interval));
     }
 
     function getSelectedSamples() {
-      if (state.analysisMode === 'timeseries') return state.filtered || [];
+      if (state.analysisMode === 'disptrim') return state.filtered || [];
       const labelKey = currentLabelKey();
       return state.filtered.filter(r => state.selected.has(r[labelKey]));
     }
 
-    function drawTimeSeriesPlot() {
+    function drawDisplacementTrimPlot() {
       const samples = state.filtered || [];
       if (!samples.length) {
         Plotly.purge('plot');
@@ -708,14 +710,13 @@
       }
       const traces = [];
       for (const [vessel, rows] of [...byVessel.entries()].sort((a,b)=>a[0].localeCompare(b[0]))) {
-        rows.sort((a,b)=>(a.DT||0)-(b.DT||0));
         traces.push({
-          x: rows.map(r => new Date(r.DT)),
-          y: rows.map(r => r.Power),
+          x: rows.map(r => r.Displacement),
+          y: rows.map(r => r.Trim),
           mode: 'markers',
           type: 'scattergl',
           name: `${vessel} (n=${rows.length})`,
-          marker: { size: 5, opacity: 0.7 }
+          marker: { size: 6, opacity: 0.72 }
         });
       }
       const yMinRaw = el('yMin').value.trim();
@@ -725,29 +726,31 @@
       const minDisp = num(el('minDisp').value), maxDisp = num(el('maxDisp').value);
       const minSpeed = num(el('minSpeed').value), maxSpeed = num(el('maxSpeed').value);
       const minWave = num(el('minWave').value), maxWave = num(el('maxWave').value);
+      const minTrim = el('minTrim').value.trim() || 'auto';
+      const maxTrim = el('maxTrim').value.trim() || 'auto';
       const startDate = el('startDate').value || 'auto';
       const endDate = el('endDate').value || 'auto';
       Plotly.newPlot('plot', traces, {
-        title: { text: `${CONFIG[state.currentTab].label} | Date vs Shaft Power` },
-        xaxis: { title: 'Date', gridcolor: '#e6ebf2' },
-        yaxis: { title: 'Shaft Power (kW)', gridcolor: '#e6ebf2', range: (yMin !== null && yMax !== null) ? [yMin, yMax] : undefined },
+        title: { text: `${CONFIG[state.currentTab].label} | Displacement vs Trim` },
+        xaxis: { title: 'Displacement (MT)', gridcolor: '#e6ebf2' },
+        yaxis: { title: 'Trim (m)', gridcolor: '#e6ebf2', range: (yMin !== null && yMax !== null) ? [yMin, yMax] : undefined },
         plot_bgcolor: '#ffffff',
         paper_bgcolor: '#ffffff',
         margin: { l: 70, r: 260, t: 80, b: 80 },
         legend: { x: 1.02, y: 0.5, xanchor: 'left', yanchor: 'middle', bgcolor: 'rgba(255,255,255,0.65)' },
         annotations: [{
           x: 0.01, y: 0.99, xref: 'paper', yref: 'paper', showarrow: false, align: 'left',
-          text: `Filters:<br>Displacement ${minDisp.toLocaleString()}-${maxDisp.toLocaleString()} MT<br>Wave height ${minWave.toFixed(2)} to ${maxWave.toFixed(2)} m<br>Speed ${minSpeed.toFixed(2)}-${maxSpeed.toFixed(2)} kn<br>Date ${startDate} to ${endDate}<br>Rows used: ${samples.length.toLocaleString()}`,
+          text: `Filters:<br>Displacement ${minDisp.toLocaleString()}-${maxDisp.toLocaleString()} MT<br>Trim ${minTrim} to ${maxTrim} m<br>Wave height ${minWave.toFixed(2)} to ${maxWave.toFixed(2)} m<br>Speed ${minSpeed.toFixed(2)}-${maxSpeed.toFixed(2)} kn<br>Date ${startDate} to ${endDate}<br>Rows used: ${samples.length.toLocaleString()}`,
           bgcolor: 'rgba(255,255,255,0.93)', bordercolor: '#cbd5e1', borderwidth: 1, font: { size: 12 }
         }]
       }, { responsive: true, displaylogo: false });
-      state.currentTitle = `${CONFIG[state.currentTab].label.toLowerCase().replace(/\s+/g,'_')}_date_vs_shaft_power`;
+      state.currentTitle = `${CONFIG[state.currentTab].label.toLowerCase().replace(/\s+/g,'_')}_displacement_vs_trim`;
       state.currentPlotReady = true;
     }
 
     function drawPlot() {
-      if (state.analysisMode === 'timeseries') {
-        drawTimeSeriesPlot();
+      if (state.analysisMode === 'disptrim') {
+        drawDisplacementTrimPlot();
         return;
       }
       const selectedSummary = getSelectedSummary();
@@ -851,10 +854,10 @@
           return;
         }
 
-        if (state.analysisMode === 'timeseries') {
+        if (state.analysisMode === 'disptrim') {
           state.filtered = filtered;
           state.summary = [{
-            mode: 'timeseries',
+            mode: 'disptrim',
             rows_used: filtered.length,
             first_date: new Date(Math.min(...filtered.map(r => r.DT))).toISOString(),
             last_date: new Date(Math.max(...filtered.map(r => r.DT))).toISOString()
@@ -863,7 +866,7 @@
           state.selected = new Set();
           renderTrimChecks();
           drawPlot();
-          setStatus(`Loaded ${raw.length.toLocaleString()} rows, using ${filtered.length.toLocaleString()} rows for Date vs Shaft Power.`);
+          setStatus(`Loaded ${raw.length.toLocaleString()} rows, using ${filtered.length.toLocaleString()} rows for Displacement vs Trim.`);
           return;
         }
 
@@ -1026,7 +1029,7 @@
 
     function restoreSavedSnapshot(item) {
       activateTab(item.classKey || 'H');
-      if (item.analysisMode === 'immersion' || item.analysisMode === 'trim') {
+      if (item.analysisMode === 'immersion' || item.analysisMode === 'trim' || item.analysisMode === 'disptrim') {
         state.analysisMode = item.analysisMode;
         document.querySelectorAll('[data-analysis]').forEach(b => b.classList.toggle('active', b.dataset.analysis === state.analysisMode));
       }
@@ -1122,7 +1125,7 @@
           document.querySelectorAll('[data-analysis]').forEach(b => b.classList.toggle('active', b === btn));
           updateModeUI();
           applyDefaults();
-          setStatus(`Switched to ${state.analysisMode === 'immersion' ? 'Propeller Immersion' : 'Trim'} mode.`);
+          setStatus(`Switched to ${state.analysisMode === 'immersion' ? 'Propeller Immersion' : state.analysisMode === 'disptrim' ? 'Displacement vs Trim' : 'Trim'} mode.`);
         });
       });
       initDownloads();
