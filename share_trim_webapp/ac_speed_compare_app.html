@@ -4,82 +4,111 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Vessel Performance Comparison App</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <style>
     :root {
-      --bg: #f3f6fa;
-      --card: #ffffff;
-      --ink: #122033;
-      --muted: #5c6f86;
-      --line: #d9e1ea;
-      --accent: #0f6fff;
-      --accent2: #e45756;
+      --bg: #f2f6ee;
+      --card: #fbfdf8;
+      --ink: #1b3022;
+      --muted: #536a5b;
+      --line: #cfdbcf;
+      --accent: #1f8f4f;
+      --accent2: #0f5930;
       --ok: #1d8f6a;
+      --card-shadow: 0 20px 50px rgba(22, 48, 31, 0.08);
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       color: var(--ink);
-      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-      background: radial-gradient(1200px 500px at 85% -10%, #e8f1ff, var(--bg) 45%);
+      font-family: "Space Grotesk", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(900px 500px at -5% -10%, #dff2e3 0%, transparent 55%),
+        radial-gradient(900px 500px at 105% -10%, #e7f7ec 0%, transparent 55%),
+        linear-gradient(180deg, #f8fcf7 0%, var(--bg) 100%);
     }
-    .wrap { width: 100%; padding: 18px; }
-    .head { margin-bottom: 12px; }
-    h1 { margin: 0 0 4px; font-size: 28px; }
-    .sub { color: var(--muted); }
-    .layout { display: grid; grid-template-columns: 390px 1fr; gap: 14px; align-items: start; }
+    .wrap { width: 100%; max-width: 1700px; margin: 0 auto; padding: 28px 30px 36px; }
+    .head { margin-bottom: 14px; }
+    h1 { margin: 0 0 6px; font-size: 34px; letter-spacing: -0.03em; }
+    .sub { color: var(--muted); font-size: 15px; }
+    .layout { display: grid; grid-template-columns: 420px 1fr; gap: 18px; align-items: start; }
     .card {
       background: var(--card);
       border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 12px;
+      border-radius: 18px;
+      padding: 16px;
+      box-shadow: var(--card-shadow);
     }
+    .controls { position: sticky; top: 14px; }
     .controls .row { margin-bottom: 10px; }
-    .controls label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+    .controls label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 5px; font-weight: 600; }
     .controls input, .controls select {
       width: 100%;
       border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 8px;
+      border-radius: 10px;
+      padding: 9px 10px;
       font-size: 14px;
       background: #fff;
     }
-    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .tabs { display: flex; gap: 8px; margin-bottom: 10px; }
+    .controls input:focus, .controls select:focus { outline: 2px solid #b8dfc4; border-color: #8dc69f; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .tabs { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
     .tab {
       border: 1px solid var(--line);
       background: #fff;
       border-radius: 999px;
-      padding: 8px 12px;
+      padding: 9px 13px;
       font-weight: 600;
       cursor: pointer;
+      transition: all .18s ease;
     }
-    .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-    .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+    .tab:hover { transform: translateY(-1px); border-color: #9eb8a2; }
+    .tab.active {
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+      border-color: transparent;
+      color: #fff;
+      box-shadow: 0 10px 24px rgba(24, 109, 60, 0.35);
+    }
+    .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
     button {
       border: 1px solid var(--line);
       background: #fff;
-      border-radius: 8px;
-      padding: 9px 10px;
+      border-radius: 10px;
+      padding: 10px 11px;
       font-weight: 600;
       cursor: pointer;
+      transition: all .18s ease;
     }
-    .primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    button:hover { transform: translateY(-1px); border-color: #abcab2; }
+    .primary {
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+      border-color: transparent;
+      color: #fff;
+      box-shadow: 0 10px 24px rgba(24, 109, 60, 0.35);
+    }
     #plot { width: 100%; min-height: 78vh; }
-    #status { color: var(--muted); font-size: 13px; min-height: 18px; margin-top: 8px; }
+    #status { color: var(--muted); font-size: 13px; min-height: 18px; margin-top: 10px; font-weight: 500; }
     .summary {
-      margin-top: 8px;
-      padding: 10px;
-      border-radius: 8px;
-      border: 1px solid #d5e6df;
-      background: #f6fffb;
+      margin-top: 10px;
+      padding: 11px;
+      border-radius: 10px;
+      border: 1px solid #cce3d2;
+      background: #f4fcf5;
       font-size: 13px;
     }
     .summary b { color: var(--ok); }
     @media (max-width: 1100px) {
+      .wrap { padding: 16px; }
+      h1 { font-size: 28px; }
       .layout { grid-template-columns: 1fr; }
       #plot { min-height: 60vh; }
+      .controls { position: static; }
+      .btns { grid-template-columns: 1fr; }
+      .grid2 { grid-template-columns: 1fr; }
     }
     .auth-overlay {
       position: fixed;
