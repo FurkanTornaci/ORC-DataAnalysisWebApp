@@ -3,7 +3,8 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
-    { "source": "/", "destination": "/share_trim_webapp/index.html" },
+    { "source": "/", "destination": "/index.html" },
+    { "source": "/app", "destination": "/share_trim_webapp/index.html" },
     { "source": "/ac-speed-compare", "destination": "/share_trim_webapp/ac_speed_compare_app.html" },
     { "source": "/data/(.*)", "destination": "/share_trim_webapp/data/$1" }
   ]
